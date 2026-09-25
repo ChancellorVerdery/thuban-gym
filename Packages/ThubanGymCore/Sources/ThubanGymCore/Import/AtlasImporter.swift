@@ -52,7 +52,7 @@ public struct AtlasImporter: Sendable {
     public var timeout: TimeInterval
 
     public init(host: String = Preferences.defaultAtlasHost, email: String = Preferences.defaultAtlasEmail,
-                runner: CommandRunner = ProcessRunner(), timeout: TimeInterval = AtlasImporter.defaultTimeout) {
+                runner: CommandRunner = DefaultCommandRunner.make(), timeout: TimeInterval = AtlasImporter.defaultTimeout) {
         self.host = host.trimmingCharacters(in: .whitespacesAndNewlines)
         self.email = email.trimmingCharacters(in: .whitespacesAndNewlines)
         self.runner = runner

@@ -36,10 +36,16 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var atlasEmail: String = Preferences.defaultAtlasEmail
     /// `AppSection.rawValue` of the last section shown.
     public var lastSection: String?
+    /// iPhone: logging a set starts the rest timer.
+    public var restAutoStart: Bool = true
+    /// iPhone: a haptic and a notification (with sound) when the rest timer reaches 0:00.
+    public var restAlert: Bool = true
+    /// iPhone: the screen stays awake while a session is on screen.
+    public var keepScreenAwake: Bool = true
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case theme, textSize, reduceMotion, atlasHost, atlasEmail, lastSection }
+    enum CodingKeys: String, CodingKey { case theme, textSize, reduceMotion, atlasHost, atlasEmail, lastSection, restAutoStart, restAlert, keepScreenAwake }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -49,6 +55,9 @@ public struct Preferences: Codable, Equatable, Sendable {
         atlasHost = try c.decodeIfPresent(String.self, forKey: .atlasHost) ?? Preferences.defaultAtlasHost
         atlasEmail = try c.decodeIfPresent(String.self, forKey: .atlasEmail) ?? Preferences.defaultAtlasEmail
         lastSection = try c.decodeIfPresent(String.self, forKey: .lastSection)
+        restAutoStart = try c.decodeIfPresent(Bool.self, forKey: .restAutoStart) ?? true
+        restAlert = try c.decodeIfPresent(Bool.self, forKey: .restAlert) ?? true
+        keepScreenAwake = try c.decodeIfPresent(Bool.self, forKey: .keepScreenAwake) ?? true
     }
 
     public static func load() -> Preferences {

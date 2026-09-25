@@ -21,6 +21,7 @@ public protocol CommandRunner: Sendable {
     func run(executable: String, arguments: [String], stdin: Data, timeout: TimeInterval) async throws -> CommandResult
 }
 
+#if os(macOS)
 /// `Foundation.Process` implementation. Reads stdout/stderr concurrently (no pipe-buffer deadlock), feeds stdin,
 /// and terminates the process at `timeout` or when the calling task is cancelled.
 public struct ProcessRunner: CommandRunner {
@@ -96,5 +97,26 @@ private final class ProcessBox: @unchecked Sendable {
     func cancel() {
         cancelled = true
         if process.isRunning { process.terminate() }
+    }
+}
+#endif
+
+/// The runner an `AtlasImporter` uses when none is given: `ProcessRunner` on the Mac. iOS has no `Process` (and the
+/// Atlas ssh import is Mac-only), so there it is a runner that always fails.
+public enum DefaultCommandRunner {
+    public static func make() -> CommandRunner {
+        #if os(macOS)
+        return ProcessRunner()
+        #else
+        return UnavailableRunner()
+        #endif
+    }
+}
+
+/// Fails every command: external programs cannot be run on this platform.
+public struct UnavailableRunner: CommandRunner {
+    public init() {}
+    public func run(executable: String, arguments: [String], stdin: Data, timeout: TimeInterval) async throws -> CommandResult {
+        throw ThubanError.importFailed("Importing from Atlas over ssh is only available on the Mac.")
     }
 }
