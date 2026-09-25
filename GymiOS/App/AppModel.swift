@@ -101,6 +101,8 @@ final class AppModel {
     }
 
     func refreshDay() {
+        // scenePhase can turn active before `load()` ran: never roll over (and save) the empty placeholder.
+        guard isLoaded else { return }
         let now = DayKey.today()
         if now != today { today = now }
         rollover()
