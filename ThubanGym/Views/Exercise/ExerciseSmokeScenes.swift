@@ -12,6 +12,21 @@ extension SmokeScenes {
             } cleanup: { app in
                 app.presentedExerciseId = nil
             },
+            // Bodyweight (scored by reps, "BW") and unilateral (weaker side) variants, opened from Today.
+            SmokeScene(name: "exercise-sheet-bodyweight", window: .sheet) { app in
+                app.section = .today
+                app.presentedExerciseId = app.data.exercises.first { $0.name == "Pull-up" }?.id
+            } cleanup: { app in
+                app.presentedExerciseId = nil
+            },
+            SmokeScene(name: "exercise-sheet-unilateral", window: .sheet) { app in
+                app.section = .today
+                app.progressRange = .threeMonths
+                app.presentedExerciseId = app.data.exercises.first { $0.name == "Single-arm DB Row" }?.id
+            } cleanup: { app in
+                app.presentedExerciseId = nil
+                app.progressRange = .all
+            },
         ]
     }
 }
