@@ -28,6 +28,23 @@ enum IconName: String, CaseIterable {
     case info
     case calendar
     case archive
+    // iPhone / iPad (the iOS design boards)
+    /// Today tab: the app mark's kettlebell (without its star).
+    case kettlebell
+    case sliders
+    case more
+    case bell
+    case arrowUp
+    case target
+    case clock
+    case plusCircle
+    case search
+    case lines
+    case reorder
+    case minus
+    case chevronDown
+    case chevronRight
+    case chevronLeft
 
     var paths: [String] {
         switch self {
@@ -53,6 +70,21 @@ enum IconName: String, CaseIterable {
         // rect 3.5,5 17×15.5 rx 2 + header rule + rings
         case .calendar: return ["M5.5 5h13a2 2 0 0 1 2 2v11.5a2 2 0 0 1 -2 2h-13a2 2 0 0 1 -2 -2v-11.5a2 2 0 0 1 2 -2z", "M3.5 9.5h17", "M8 3v4", "M16 3v4"]
         // lid rect 3.5,4.5 17×4 rx 1 + box + handle
+        case .kettlebell: return ["M9.25 20.75A6.6 6.6 0 1 1 14.75 20.75Z", "M8.25 9.25L7.4 6.15A2.35 2.35 0 0 1 9.75 3.25h4.5a2.35 2.35 0 0 1 2.35 2.9L15.75 9.25"]
+        case .sliders: return ["M4 7h9", "M17 7h3", "M13 7a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z", "M4 17h3", "M11 17h9", "M7 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z"]
+        case .more: return ["M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0 -17 0z", "M8 12h.01", "M12 12h.01", "M16 12h.01"]
+        case .bell: return ["M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z", "M10 20.5a2 2 0 0 0 4 0"]
+        case .arrowUp: return ["M12 19V5", "M6 11l6-6 6 6"]
+        case .target: return ["M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0 -17 0z", "M7.5 12a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0 -9 0z", "M12 12h.01"]
+        case .clock: return ["M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0 -17 0z", "M12 7.5V12l3 2"]
+        case .plusCircle: return ["M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0 -17 0z", "M12 8.5v7", "M8.5 12h7"]
+        case .search: return ["M5 11a6 6 0 1 0 12 0a6 6 0 1 0 -12 0z", "M20 20l-4.5-4.5"]
+        case .lines: return ["M5 8.5h14", "M5 12h14", "M5 15.5h14"]
+        case .reorder: return ["M8 9.5l4-4 4 4", "M8 14.5l4 4 4-4"]
+        case .minus: return ["M5 12h14"]
+        case .chevronDown: return ["M6.5 9.5l5.5 5.5 5.5-5.5"]
+        case .chevronRight: return ["M9.5 6l6 6-6 6"]
+        case .chevronLeft: return ["M14.5 6l-6 6 6 6"]
         case .archive: return ["M4.5 4.5h15a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-15a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1z", "M5 8.5v10a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5 -1.5v-10", "M10 12.5h4"]
         }
     }
@@ -64,25 +96,28 @@ enum IconName: String, CaseIterable {
         return (icon, path as CGPath)
     })
 
-    fileprivate var cgPath: CGPath { IconName.parsed[self] ?? CGMutablePath() }
+    var cgPath: CGPath { IconName.parsed[self] ?? CGMutablePath() }
 }
 
 /// A line icon at `size` points, stroked in the current foreground style.
 struct Icon: View {
     var name: IconName
     var size: CGFloat = 16
+    var lineWidth: CGFloat = 1.75
 
-    init(_ name: IconName, size: CGFloat = 16) {
+    init(_ name: IconName, size: CGFloat = 16, lineWidth: CGFloat = 1.75) {
         self.name = name
         self.size = size
+        self.lineWidth = lineWidth
     }
 
     var body: some View {
         let path = name.cgPath
+        let lineWidth = lineWidth
         Canvas { context, canvasSize in
             let scale = canvasSize.width / 24
             let shape = Path(path).applying(CGAffineTransform(scaleX: scale, y: scale))
-            context.stroke(shape, with: .foreground, style: StrokeStyle(lineWidth: 1.75 * scale, lineCap: .round, lineJoin: .round))
+            context.stroke(shape, with: .foreground, style: StrokeStyle(lineWidth: lineWidth * scale, lineCap: .round, lineJoin: .round))
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)

@@ -1,0 +1,232 @@
+import SwiftUI
+import ThubanGymCore
+import UniformTypeIdentifiers
+
+/// Settings (board Settings, from Today's sliders): the eight Thuban schemes and the mode, the display unit, the
+/// rest timer switches, and Data — import / export gym.json through Files, AirDrop or the share sheet.
+struct SettingsSheet: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.thubanTheme) private var theme
+    @Environment(\.dismiss) private var dismiss
+    var embedded = false
+
+    var body: some View {
+        if embedded {
+            SettingsContent().phoneScreen(theme).navigationTitle("Settings")
+        } else {
+            NavigationStack {
+                SettingsContent()
+                    .phoneScreen(theme)
+                    .navigationTitle("Settings")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.fontWeight(.semibold) }
+                    }
+            }
+            .presentationBackground(theme.bgColor)
+        }
+    }
+}
+
+struct SettingsContent: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.thubanTheme) private var theme
+
+    @State private var importing = false
+    @State private var exporting = false
+    @State private var pending: AppModel.PendingImport?
+    @State private var message: String?
+    @State private var errorText: String?
+
+    var body: some View {
+        @Bindable var app = app
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                SectionHeading("Appearance")
+                Card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        schemes
+                        (Text(app.schemeLabel).fontWeight(.semibold).foregroundColor(theme.inkColor)
+                         + Text(" · the eight Thuban schemes, shared with the Mac").foregroundColor(theme.inkDimColor))
+                            .font(.subheadline)
+                    }
+                    .padding(16)
+                    RowDivider(inset: 0)
+                    row("Mode") {
+                        PhoneSegmented(options: AppearanceMode.allCases.map { ($0, $0.label) },
+                                       selection: Binding(get: { app.themeSelection.mode }, set: { app.setAppearanceMode($0) }),
+                                       accessibilityLabel: "Appearance mode")
+                            .frame(maxWidth: 220)
+                    }
+                }
+
+                SectionHeading("Units").padding(.top, 22)
+                Card {
+                    row("Weight") {
+                        PhoneSegmented(options: [(WeightUnit.lbs, "lb"), (WeightUnit.kg, "kg")],
+                                       selection: Binding(get: { app.unit }, set: { app.setUnit($0) }),
+                                       accessibilityLabel: "Weight unit")
+                            .frame(maxWidth: 220)
+                    }
+                }
+                CardFootnote(text: "Display only. Weights are stored in kg, so switching never rounds your history.")
+
+                SectionHeading("During a workout").padding(.top, 22)
+                Card {
+                    row("Default rest") {
+                        Menu {
+                            ForEach([60, 75, 90, 105, 120, 150, 180, 240, 300], id: \.self) { seconds in
+                                Button(PhoneFormat.rest(seconds)) { app.updateSettings { $0.restSeconds = seconds } }
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(PhoneFormat.rest(app.settings.restSeconds)).font(PhoneFont.mono(17)).foregroundStyle(theme.inkDimColor)
+                                Icon(.reorder, size: 14).foregroundStyle(theme.inkFaintColor)
+                            }
+                            .frame(minHeight: PhoneMetrics.hit)
+                        }
+                        .accessibilityLabel("Default rest, \(PhoneFormat.rest(app.settings.restSeconds))")
+                    }
+                    RowDivider()
+                    toggle("Start rest when a set is logged", isOn: $app.preferences.restAutoStart)
+                    RowDivider()
+                    toggle("Haptic and sound at 0:00", isOn: $app.preferences.restAlert)
+                    RowDivider()
+                    toggle("Keep the screen awake", isOn: $app.preferences.keepScreenAwake)
+                }
+                CardFootnote(text: "A workout's own rest (Workouts ▸ a workout) wins over the default.")
+
+                SectionHeading("Data").padding(.top, 22)
+                Card {
+                    actionRow("Import gym.json…", icon: .download) { importing = true }
+                    RowDivider()
+                    actionRow("Export gym.json…", icon: .file) { exporting = true }
+                }
+                CardFootnote(text: dataFootnote)
+                if let message {
+                    Text(message).font(.footnote.weight(.semibold)).foregroundStyle(theme.posTextColor).padding(.horizontal, 4).padding(.top, 6)
+                }
+
+                SectionHeading("About").padding(.top, 22)
+                Card {
+                    HStack(spacing: 12) {
+                        AppArtView(size: 28, theme: theme)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Thuban Gym").font(PhoneFont.serif(17, relativeTo: .headline)).foregroundStyle(theme.inkColor)
+                            Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")")
+                                .font(.footnote).foregroundStyle(theme.inkDimColor)
+                        }
+                        Spacer()
+                    }
+                    .padding(16)
+                }
+            }
+            .padding(.horizontal, PhoneMetrics.gutter)
+            .padding(.top, 12)
+            .padding(.bottom, 32)
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .data]) { result in
+            switch result {
+            case .success(let url):
+                do { pending = try app.readImport(url) } catch { errorText = error.localizedDescription }
+            case .failure(let error):
+                errorText = error.localizedDescription
+            }
+        }
+        .fileExporter(isPresented: $exporting, document: app.exportDocument, contentType: .json, defaultFilename: "gym") { result in
+            if case .failure(let error) = result { errorText = error.localizedDescription } else { message = "Exported gym.json." }
+        }
+        .confirmationDialog(pending.map { "Replace this phone's log with \($0.fileName)?" } ?? "", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+                            titleVisibility: .visible, presenting: pending) { pending in
+            Button("Replace with \(pending.fileName)", role: .destructive) {
+                do {
+                    try app.applyImport(pending)
+                    message = "Imported \(PhoneFormat.count(pending.contents.workouts, "workout")) and \(PhoneFormat.count(pending.contents.sets, "set")). The previous log was saved as a snapshot."
+                } catch { errorText = error.localizedDescription }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { pending in
+            Text(describe(pending.contents) + ". A snapshot of the phone's current log is kept first.")
+        }
+        .alert("Could not use that file", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorText ?? "")
+        }
+    }
+
+    // MARK: Pieces
+
+    private var schemes: some View {
+        HStack(spacing: 0) {
+            ForEach(SchemePresets.all) { scheme in
+                let selected = scheme.id == app.themeSelection.schemeId
+                Button { app.selectScheme(id: scheme.id) } label: {
+                    Circle()
+                        .fill(Color(hex: scheme.accent))
+                        .frame(width: 28, height: 28)
+                        .padding(4)
+                        .overlay(Circle().strokeBorder(selected ? theme.inkColor : .clear, lineWidth: 2))
+                        .frame(width: 40, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel(scheme.label)
+                .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Color scheme")
+    }
+
+    private func row<T: View>(_ label: String, @ViewBuilder trailing: () -> T) -> some View {
+        HStack(spacing: 12) {
+            Text(label).font(.body).foregroundStyle(theme.inkColor)
+            Spacer(minLength: 8)
+            trailing()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(minHeight: 58)
+    }
+
+    private func toggle(_ label: String, isOn: Binding<Bool>) -> some View {
+        Toggle(label, isOn: isOn)
+            .font(.body)
+            .foregroundStyle(theme.inkColor)
+            .tint(theme.accentColor)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 58)
+    }
+
+    private func actionRow(_ label: String, icon: IconName, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Icon(icon, size: 20).foregroundStyle(theme.brassInkColor)
+                Text(label).font(.body).foregroundStyle(theme.inkColor)
+                Spacer()
+                RowChevron()
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 58)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RowPressStyle())
+    }
+
+    private var dataFootnote: String {
+        let local = app.localContents
+        return "The phone keeps its own gym.json, the same format as the Mac. To bring the Mac's log over, export it there (Settings ▸ Data & storage ▸ Export), AirDrop it or save it to Files, then import it here. On this phone: "
+            + describe(local) + "."
+    }
+
+    private func describe(_ contents: GymTransfer.Contents) -> String {
+        var text = "\(PhoneFormat.count(contents.workouts, "workout")), \(PhoneFormat.count(contents.sets, "set")) in \(PhoneFormat.count(contents.sessions, "session"))"
+        if let first = contents.firstDay, let last = contents.lastDay {
+            text += ", \(GymFormat.monthDay(first)) – \(GymFormat.monthDay(last))"
+        }
+        if contents.format == "atlas" { text += " (an Atlas export)" }
+        return text
+    }
+}

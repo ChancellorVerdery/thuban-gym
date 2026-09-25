@@ -1,5 +1,8 @@
-import AppKit
+import CoreGraphics
+import Foundation
+#if !APPICON_TOOL
 import SwiftUI
+#endif
 #if !APPICON_TOOL
 import ThubanGymCore
 #endif
@@ -74,10 +77,10 @@ struct AppArtView: View {
             context.withCGContext { cg in
                 AppArt.draw(in: cg, rect: CGRect(origin: .zero, size: canvasSize)) { role in
                     switch role {
-                    case .accentStroke, .accentFill: return NSColor(ink).cgColor
-                    case .signalStroke, .signalFill: return NSColor(signal).cgColor
-                    case .panelFill: return NSColor(panel).cgColor
-                    case .bgFill: return NSColor(background).cgColor
+                    case .accentStroke, .accentFill: return ink.resolve(in: context.environment).cgColor
+                    case .signalStroke, .signalFill: return signal.resolve(in: context.environment).cgColor
+                    case .panelFill: return panel.resolve(in: context.environment).cgColor
+                    case .bgFill: return background.resolve(in: context.environment).cgColor
                     }
                 }
             }

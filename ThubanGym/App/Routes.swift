@@ -1,9 +1,6 @@
 import Foundation
 import ThubanGymCore
 
-/// SwiftUI's `ColorScheme` shadows the core type inside the app target.
-typealias ThubanScheme = ThubanGymCore.ColorScheme
-
 /// The four sections in the section bar, in order.
 enum AppSection: String, CaseIterable, Hashable, Codable, Identifiable {
     case today, plan, workouts, progress
@@ -51,22 +48,6 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .plan: return .plan
         case .data: return .archive
         case .about: return .info
-        }
-    }
-}
-
-/// Progress range picker (3M / 6M / All).
-enum ProgressRange: String, CaseIterable, Hashable, Identifiable {
-    case threeMonths = "3M", sixMonths = "6M", all = "All"
-
-    var id: String { rawValue }
-
-    /// First day of the range (nil = from the first logged day).
-    func start(today: DayKey) -> DayKey? {
-        switch self {
-        case .threeMonths: return today.adding(days: -91)
-        case .sixMonths: return today.adding(days: -182)
-        case .all: return nil
         }
     }
 }
