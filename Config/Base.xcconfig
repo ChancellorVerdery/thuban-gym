@@ -1,0 +1,14 @@
+// Signing and the iCloud switch, shared by both targets (Mac.xcconfig / iOS.xcconfig include this file).
+//
+// Without a team (the default, and what a fresh clone gets) the apps build exactly as before: ad-hoc signed on the
+// Mac, unsigned in the simulator, WITHOUT the iCloud entitlements (they need a provisioning profile, and an ad-hoc
+// app that claims them is killed at launch). The app then shows "Off: iCloud needs a signed build".
+//
+// With a team: copy Signing.example.xcconfig to Signing.xcconfig (gitignored) and set DEVELOPMENT_TEAM. The
+// scripts then sign automatically (-allowProvisioningUpdates) with the iCloud entitlements, and the Info.plist key
+// ThubanICloud = YES tells the app it may look for its container.
+
+DEVELOPMENT_TEAM =
+THUBAN_SIGNED = NO
+
+#include? "Signing.xcconfig"

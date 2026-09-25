@@ -1,0 +1,4 @@
+// Copy to Config/Signing.xcconfig (gitignored) and put your Apple Developer team id here (Xcode ▸ Settings ▸
+// Accounts ▸ your team, or developer.apple.com ▸ Membership). Needed for iCloud Sync.
+DEVELOPMENT_TEAM = ABCDE12345
+THUBAN_SIGNED = YES

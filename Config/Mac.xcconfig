@@ -1,0 +1,14 @@
+// Thuban Gym (macOS). See Base.xcconfig.
+#include "Base.xcconfig"
+
+CODE_SIGN_ENTITLEMENTS = $(THUBAN_MAC_ENTITLEMENTS_$(THUBAN_SIGNED))
+THUBAN_MAC_ENTITLEMENTS_NO = ThubanGym/Resources/ThubanGym.entitlements
+THUBAN_MAC_ENTITLEMENTS_YES = ThubanGym/Resources/ThubanGym-iCloud.entitlements
+
+CODE_SIGN_STYLE = $(THUBAN_MAC_STYLE_$(THUBAN_SIGNED))
+THUBAN_MAC_STYLE_NO = Manual
+THUBAN_MAC_STYLE_YES = Automatic
+
+CODE_SIGN_IDENTITY = $(THUBAN_MAC_IDENTITY_$(THUBAN_SIGNED))
+THUBAN_MAC_IDENTITY_NO = -
+THUBAN_MAC_IDENTITY_YES = Apple Development

@@ -1,6 +1,7 @@
 # Thuban Gym — architecture contract
 
-Native macOS app (SwiftUI, macOS 15+, Xcode 26, Swift 5 language mode, XcodeGen, ad-hoc signing, no Keychain),
+Native macOS app (SwiftUI, macOS 15+, Xcode 26, Swift 5 language mode, XcodeGen, ad-hoc signing unless a team is
+set — see "iCloud sync", no Keychain),
 plus an iPhone / iPad app (target `GymiOS`, see "iOS app" at the end) built on the same core and shared sources.
 A local training log: the plan (weekly or a cycle), today's session with set logging, workouts and their
 exercises, progress (e1RM indexes and a strength score), and a one-time read-only import from the Atlas gym plugin.
@@ -53,6 +54,9 @@ Packages/ThubanGymCore/      SwiftPM library + tests (swift test)
   Import/   AtlasImporter (SQL, ssh command, fetch, convert, ImportSummary), AtlasDocument (tolerant rows),
             CommandRunner / ProcessRunner (Process behind a protocol, macOS only; tests use FixtureRunner;
             DefaultCommandRunner gives iOS an always-failing runner)
+  Sync/     SyncMeta (tombstones, single-value stamps, SyncKey, assignLegacyIdentity), GymMerge (stamp / merge /
+            normalize), CloudDocumentStore (coordinated read-merge-write + NSFilePresenter + conflict versions),
+            CloudLocator (container, off reasons), GymSync (the apps' controller, status, SyncState)
   Session/  SessionLogic (set slots, suggestions, progress segments, next exercise, RestCountdown), WorkoutSummary
   Store/    … GymTransfer (gym.json import / export between devices: decode with validation, encode, contents)
   Sample/   SampleData (deterministic realistic data for smoke / THUBAN_GYM_SEED=sample)
@@ -329,3 +333,71 @@ board's custom pad. The quick −5 / −2.5 / +2.5 / +5 / Same chips stay, in th
 - `scripts/ios_install.sh` — Release simulator build installed on "Thuban iPhone" (created when missing); a signed
   device build + `devicectl` install only when a paired iPhone shows up AND `DEVELOPMENT_TEAM` is set.
 - `scripts/make_ios_icon.sh` — the 1024 single-size iOS AppIcon (Brass mark on the dark plate) from Shared/Art.
+
+## iCloud sync
+
+The Mac and the iPhone share ONE document through iCloud Documents: container `iCloud.org.thuban.gym`, file
+`Documents/gym.json`, hidden (`NSUbiquitousContainerIsDocumentScopePublic` false — never shown in Finder / Files).
+Each app keeps its local Application Support gym.json (backups, offline cache, the working copy); the shared file is
+merged with it. Settings: Mac ▸ Data & storage ▸ iCloud Sync, iOS ▸ Settings ▸ Data (switch, status line
+"Up to date · last synced 9:41 AM" / "Syncing…" / "Off: <reason>", Sync now). The switch is per device
+(`Preferences.iCloudSync`, default on).
+
+**Data model (format 2).** Every record has a stable id and an `updatedAt` stamp (whole seconds, so it survives
+the file): workouts / exercises (id, plus an `order` key for list order), sets (`SetEntry.id` `gs-…`, `loggedAt`),
+completions (date|workout|ts), overrides (their date), extras (date|exercise). `sync` holds the stamps of the plan,
+the gym settings and the running session, and `deleted` = tombstones (`w:/e:/s:/c:/o:/x:` key → date). The pure
+mutations do not know any of this: `AppModel.commit` calls `data.stamped(from: old)`, which diffs old vs new —
+new / changed records get `now`, removed ones a tombstone, moved list items a new order key, new sets an id.
+Format-1 files still load: the decoder gives sets `<log id>~NNN` ids and items their array position (deterministic,
+so two devices migrating copies of the same old file agree); `GymStore.loadMigrating` snapshots the old file once
+("before sync migration") and the app saves it as format 2. Imports (`replaceData`) get the same deterministic ids.
+
+**Merge (`GymMerge.merge`, commutative, associative, idempotent).** Union by id; when both sides have a record the
+later `updatedAt` wins (ties broken by the record's JSON, identically everywhere). A record survives only if it
+changed after its tombstone, so a stale copy never resurrects a deletion while a restore (which re-stamps) does.
+Sets merge one by one inside their row (exercise + day + side; two rows for the same key collapse into one), so a
+set logged on either device is never dropped — only an explicit delete removes one. Plan, settings, running
+session: last writer wins. Normal form: tombstones applied, references to deleted workouts / exercises removed (as
+`deleteWorkout` does), overrides / extras and their tombstones older than `lastRollover − 90 d` expired, every list
+sorted canonically — so devices converge byte-for-byte and stop writing. Replace-style actions (Atlas import,
+gym.json import, restore) replace the log on every device (everything missing is tombstoned); their dialogs say so.
+Known limits: a concurrent edit of the same record on two offline devices keeps only the later one; the cycle
+pointer is part of the plan value (LWW); tombstones are kept (small) except expired override / extra ones.
+
+**Flow.** `persist()` saves locally, then `sync.requestSync(data)`. `GymSync` (core, main actor) runs
+`CloudDocumentStore.synchronize` on a serial background queue (coalesced): a coordinated `.forMerging` write that
+reads the shared copy and every `NSFileVersion` conflict version, merges them with the local document, writes only
+when the result differs, and marks the merged versions resolved (an unreadable version is left in place; an
+unreadable or newer-format shared file is never overwritten — status "Sync failed: …"). The result goes to
+`AppModel.adoptSynced`, which merges it into the CURRENT document (a set logged meanwhile is kept), saves locally,
+runs the rollover and pushes again only if it still differs. Remote changes arrive through the file presenter, an
+`NSMetadataQuery` on the container (which also starts downloads), app activation and Sync now. First sync on a
+device: "before icloud" snapshot, then the same merge — a missing shared file is uploaded, an existing one merged.
+
+**When it is off.** `CloudLocator` decides: `THUBAN_GYM_CLOUD_DIR` (a plain folder used as the container — the smoke
+runs use a temp one; also handy for two Mac instances) → `THUBAN_GYM_HOME` set (test data: "test data folder in
+use", never touches real iCloud) → the build's Info.plist `ThubanICloud` (YES only when signed with the entitlements:
+"iCloud needs a signed build") → `ubiquityIdentityToken` ("not signed in to iCloud") → the container URL ("iCloud
+Drive is not available"). An unreadable local gym.json blocks sync until a restore.
+
+**Signing — how to turn it on.** Needs the paid team (iCloud containers are not available to free accounts).
+1. Xcode ▸ Settings ▸ Accounts: add the Apple ID of the developer account.
+2. `cp Config/Signing.example.xcconfig Config/Signing.xcconfig` (gitignored) and set `DEVELOPMENT_TEAM` to the team
+   id (Accounts ▸ the team, or developer.apple.com ▸ Membership). `$DEVELOPMENT_TEAM` in the environment works too.
+3. `scripts/install.sh` (Mac) and `scripts/ios_install.sh` (iPhone, cable + Developer Mode). With a team,
+   `scripts/signing.sh` makes them sign automatically with `-allowProvisioningUpdates
+   -allowProvisioningDeviceRegistration`, which registers the App IDs `org.thuban.gym` / `org.thuban.gym.ios`, the
+   container `iCloud.org.thuban.gym`, this Mac and the iPhone, and downloads the profiles. If Xcode cannot create
+   the container, add it once at developer.apple.com ▸ Identifiers ▸ iCloud Containers and enable iCloud (CloudKit
+   / iCloud Documents) with it on both App IDs.
+4. Both devices must be signed in to the same iCloud account with iCloud Drive on.
+
+Mechanics: `Config/Base.xcconfig` (`THUBAN_SIGNED = NO`, `#include? "Signing.xcconfig"`), `Config/Mac.xcconfig` /
+`Config/iOS.xcconfig` pick `CODE_SIGN_ENTITLEMENTS` (`ThubanGym.entitlements` vs `ThubanGym-iCloud.entitlements`
+on the Mac, none vs `GymiOS/Resources/GymiOS-iCloud.entitlements` on iOS), style and identity from `THUBAN_SIGNED`.
+Without a team every build is exactly as before (ad-hoc Mac, unsigned simulator) with the iCloud entitlements
+stripped. Simulator builds (`ios_build.sh`, `ios_smoke.sh`) are always unsigned (`THUBAN_SIGNED=NO`). The Mac app
+stays non-sandboxed. Tests: `Tests/…/SyncMergeTests` (rules, migration) and `SyncCloudTests` (two devices on one
+temp folder, conflict versions, presenter, GymSync end to end) — no real iCloud.
+

@@ -16,10 +16,12 @@ if [[ "${SKIP_BUILD:-0}" != "1" || ! -x "$APP" ]]; then
 fi
 
 HOME_DIR="$(mktemp -d "${TMPDIR:-/tmp}/thuban-gym-smoke-home.XXXXXX")"
+# A plain folder standing in for the iCloud container: the run exercises the real sync path, never real iCloud.
+CLOUD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/thuban-gym-smoke-cloud.XXXXXX")"
 rm -rf "$OUT"; mkdir -p "$OUT"
 echo "Smoke home: $HOME_DIR"
 echo "Output:     $OUT"
-THUBAN_GYM_SMOKE="$OUT" THUBAN_GYM_HOME="$HOME_DIR" "$APP" > "$LOG" 2>&1 &
+THUBAN_GYM_SMOKE="$OUT" THUBAN_GYM_HOME="$HOME_DIR" THUBAN_GYM_CLOUD_DIR="$CLOUD_DIR" "$APP" > "$LOG" 2>&1 &
 PID=$!
 for i in {1..180}; do
   kill -0 "$PID" 2>/dev/null || break
@@ -32,5 +34,6 @@ else
 fi
 echo "--- app output (last 40 lines of $LOG):"; tail -40 "$LOG"
 echo "--- screenshots:"; ls "$OUT"/*.png 2>/dev/null || echo "(none)"
-rm -rf "$HOME_DIR"
+if [[ -f "$CLOUD_DIR/Documents/gym.json" ]]; then echo "Synced copy: $(wc -c < "$CLOUD_DIR/Documents/gym.json" | tr -d ' ') bytes in the stand-in container"; fi
+rm -rf "$HOME_DIR" "$CLOUD_DIR"
 exit $STATUS

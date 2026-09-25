@@ -41,6 +41,7 @@ struct SettingsContent: View {
 
     var body: some View {
         @Bindable var app = app
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if showsTitle { PageTitle("Settings").padding(.bottom, 16) }
@@ -98,8 +99,12 @@ struct SettingsContent: View {
                 }
                 CardFootnote(text: "A workout's own rest (Workouts ▸ a workout) wins over the default.")
 
-                SectionHeading("Data").padding(.top, 22)
+                SectionHeading("Data").padding(.top, 22).id(SettingsAnchor.data)
                 Card {
+                    toggle("iCloud Sync", isOn: $app.preferences.iCloudSync)
+                    RowDivider()
+                    syncStatusRow
+                    RowDivider()
                     actionRow("Import gym.json…", icon: .download) { importing = true }
                     RowDivider()
                     actionRow("Export gym.json…", icon: .file) { exporting = true }
@@ -126,6 +131,11 @@ struct SettingsContent: View {
             .padding(.horizontal, PhoneMetrics.gutter)
             .padding(.top, 12)
             .padding(.bottom, 32)
+        }
+        .onChange(of: app.smokeSettingsAnchor, initial: true) { _, anchor in
+            guard let anchor else { return }
+            proxy.scrollTo(anchor, anchor: .top)
+        }
         }
         .fileExporter(isPresented: $exporting, document: app.exportDocument, contentType: .json, defaultFilename: "gym") { result in
             if case .failure(let error) = result { errorText = error.localizedDescription } else { message = "Exported gym.json." }
@@ -200,8 +210,40 @@ struct SettingsContent: View {
 
     private var dataFootnote: String {
         let local = app.localContents
-        return "The phone keeps its own gym.json, the same format as the Mac. To bring the Mac's log over, export it there (Settings ▸ Data & storage ▸ Export), AirDrop it or save it to Files, then import it here. On this phone: "
+        let sync = app.syncStatus.hint(device: "iPhone").map { $0 + " " } ?? ""
+        return sync + "With iCloud Sync on, this phone and the Mac share one log through your own iCloud, merged set by set. Import and export still move a gym.json by hand (AirDrop, Files). On this phone: "
             + PhoneFormat.contents(local) + "."
+    }
+
+    /// "Up to date · last synced 9:41 AM" with a status dot, and Sync now.
+    private var syncStatusRow: some View {
+        let status = app.syncStatus
+        return HStack(spacing: 10) {
+            Circle().fill(syncDot(status.tone)).frame(width: 8, height: 8)
+            Text(status.text())
+                .font(.subheadline)
+                .foregroundStyle(status.tone == .bad ? theme.negTextColor : theme.inkDimColor)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Sync status: \(status.text())")
+            Spacer(minLength: 8)
+            Button("Sync now") { app.syncNow() }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(app.canSyncNow ? theme.brassInkColor : theme.inkFaintColor)
+                .disabled(!app.canSyncNow)
+                .frame(minHeight: PhoneMetrics.hit)
+                .accessibilityHint("Merges this phone's log with the copy in iCloud")
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 58)
+    }
+
+    private func syncDot(_ tone: SyncTone) -> Color {
+        switch tone {
+        case .good: return theme.posColor
+        case .busy: return theme.signalColor
+        case .idle: return theme.line2Color
+        case .bad: return theme.negColor
+        }
     }
 
 }
@@ -235,7 +277,8 @@ struct GymImportModifier: ViewModifier {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { pending in
-                Text(PhoneFormat.contents(pending.contents) + (app.isFirstRun ? "." : ". A snapshot of the phone's current log is kept first."))
+                Text(PhoneFormat.contents(pending.contents) + (app.isFirstRun ? "." : ". A snapshot of the phone's current log is kept first.")
+                     + (!app.isFirstRun && app.iCloudSyncEnabled && app.syncStatus.isOn ? " With iCloud Sync on, the Mac gets this log too." : ""))
             }
             .alert("Could not use that file", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
                 Button("OK", role: .cancel) {}
@@ -249,4 +292,9 @@ extension View {
     func gymImport(isPresented: Binding<Bool>, onDone: @escaping (String) -> Void = { _ in }) -> some View {
         modifier(GymImportModifier(isPresented: isPresented, onDone: onDone))
     }
+}
+
+/// Scroll targets inside Settings.
+enum SettingsAnchor {
+    static let data = "settings-data"
 }

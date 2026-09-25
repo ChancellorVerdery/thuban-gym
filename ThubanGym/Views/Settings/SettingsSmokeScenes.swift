@@ -56,6 +56,28 @@ extension SmokeScenes {
                 app.importPhase = .idle
                 app.setAppearanceMode(.light)
             },
+            // iCloud Sync rows: the smoke run syncs with a temp folder (THUBAN_GYM_CLOUD_DIR), so the pane shows
+            // "Up to date"; these show the other states.
+            SmokeScene(name: "settings-data-unsigned", window: .settings) { app in
+                app.sync.statusOverride = .off(.unsignedBuild)
+                app.openSettings(.data)
+            } cleanup: { app in
+                app.sync.statusOverride = nil
+            },
+            SmokeScene(name: "settings-data-syncing-dark", window: .settings) { app in
+                app.setAppearanceMode(.dark)
+                app.sync.statusOverride = .syncing
+                app.openSettings(.data)
+            } cleanup: { app in
+                app.sync.statusOverride = nil
+                app.setAppearanceMode(.light)
+            },
+            SmokeScene(name: "settings-data-off", window: .settings, settle: 1.5) { app in
+                app.iCloudSyncEnabled = false
+                app.openSettings(.data)
+            } cleanup: { app in
+                app.iCloudSyncEnabled = true
+            },
             SmokeScene(name: "settings-plan-dark", window: .settings) { app in
                 app.setAppearanceMode(.dark)
                 app.openSettings(.plan)

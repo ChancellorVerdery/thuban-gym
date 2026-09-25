@@ -26,6 +26,9 @@ enum PhoneSmoke {
         let home = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("smoke-home-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         setenv(AppPaths.homeVariable, home.path, 1)
+        // A folder standing in for the iCloud container, so Settings shows a real "Up to date" (never real iCloud).
+        let cloud = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("smoke-cloud-\(UUID().uuidString)", isDirectory: true)
+        setenv(CloudLocator.cloudDirVariable, cloud.path, 1)
         try? FileManager.default.removeItem(at: shotsDirectory)
         try? FileManager.default.createDirectory(at: shotsDirectory, withIntermediateDirectories: true)
     }
@@ -94,6 +97,12 @@ enum PhoneSmoke {
         await settle(0.6)
         app.showSettings = true
         await shot("16-settings")
+        app.smokeSettingsAnchor = SettingsAnchor.data
+        await shot("17-settings-data")
+        app.sync.statusOverride = .off(.unsignedBuild)
+        await shot("18-settings-data-unsigned")
+        app.sync.statusOverride = nil
+        app.smokeSettingsAnchor = nil
         app.showSettings = false
         await settle(0.8)
 
@@ -170,7 +179,9 @@ enum PhoneSmoke {
         app.padSection = .workouts
         await shot("84-ipad-workouts")
         app.padSection = .settings
+        app.smokeSettingsAnchor = SettingsAnchor.data
         await shot("86-ipad-settings")
+        app.smokeSettingsAnchor = nil
         app.padSection = .today
         app.setAppearanceMode(.dark)
         await shot("85-ipad-session-dark", settle: 1.8)

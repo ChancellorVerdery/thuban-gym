@@ -1,10 +1,14 @@
 #!/bin/zsh
-# Debug build of the app (ad-hoc signed, runs locally). Prints only errors/warnings from our sources and the result.
+# Debug build of the app. Prints only errors/warnings from our sources and the result.
+# Signing (scripts/signing.sh): with a team in Config/Signing.xcconfig (or $DEVELOPMENT_TEAM) it signs automatically
+# with the iCloud entitlements; without one it is ad-hoc signed without them, as before.
 # DERIVED=<dir> overrides the DerivedData path (use a private one when others may be building);
 # CONFIG=Release builds Release. The Xcode project is regenerated from project.yml every time (it is not committed).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.local/bin:$PATH"
+source scripts/signing.sh
+if [[ -z "$TEAM" ]]; then SIGN_ARGS+=(CODE_SIGN_IDENTITY=-); fi
 CONFIG="${CONFIG:-Debug}"
 DERIVED="${DERIVED:-.build/DerivedData}"
 LOG="${DERIVED}/xcodebuild.log"
@@ -12,9 +16,9 @@ mkdir -p "$DERIVED"
 xcodegen generate --quiet || exit 1
 xcodebuild -project ThubanGym.xcodeproj -scheme ThubanGym -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" -destination 'platform=macOS' \
-  CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES build "$@" > "$LOG" 2>&1
+  "${SIGN_ARGS[@]}" CODE_SIGNING_ALLOWED=YES build "$@" > "$LOG" 2>&1
 STATUS=$?
 grep -E "(error|warning): " "$LOG" | grep -E "ThubanGym/|ThubanGymCore/|xcodebuild: error" | grep -v "DerivedData" | sort -u | head -60
 grep -E "\*\* BUILD (SUCCEEDED|FAILED) \*\*" "$LOG" || echo "** BUILD RESULT UNKNOWN (see $LOG) **"
-echo "App: $DERIVED/Build/Products/$CONFIG/Thuban Gym.app"
+echo "App: $DERIVED/Build/Products/$CONFIG/Thuban Gym.app ($([[ -n "$TEAM" ]] && echo "signed, team $TEAM, iCloud" || echo "ad-hoc, no iCloud"))"
 exit $STATUS

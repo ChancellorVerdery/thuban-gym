@@ -71,7 +71,7 @@ private struct SettingsNav: View {
                 SettingsNavRow(pane: pane, isSelected: pane == selection) { selection = pane }
             }
             Spacer(minLength: 16)
-            Text("Everything lives on this Mac. Atlas is read once and never written to.")
+            Text("Your log lives on this Mac, shared only through your own iCloud. Atlas is read once and never written to.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(theme.inkFaintColor)
                 .fixedSize(horizontal: false, vertical: true)

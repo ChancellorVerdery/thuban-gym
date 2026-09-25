@@ -14,7 +14,9 @@ struct DataSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             SettingsPaneHeader(eyebrow: nil, title: "Data & storage",
-                               caption: "Everything lives on this Mac in one file. Nothing is synced or sent anywhere.")
+                               caption: "Everything lives in one file on this Mac. With iCloud Sync on, it is shared with your iPhone through your own iCloud; nothing is sent anywhere else.")
+
+            SyncSettingsGroup()
 
             SettingsGroup("On this Mac") {
                 VStack(spacing: 0) {
@@ -82,7 +84,8 @@ struct DataSettings: View {
             Button("Restore", role: .destructive) { restore(backup) }
             Button("Cancel", role: .cancel) {}
         } message: { backup in
-            Text("Replaces everything here with the copy from \(Self.dateText(backup.created)). What is here now is saved as a backup first.")
+            Text("Replaces everything here with the copy from \(Self.dateText(backup.created)). What is here now is saved as a backup first."
+                 + (app.iCloudSyncEnabled && app.syncStatus.isOn ? " With iCloud Sync on, your iPhone gets the restored log too." : ""))
         }
     }
 
@@ -164,6 +167,8 @@ private struct BackupRow: View {
         case "daily": return "Daily"
         case "before-import": return "Before import"
         case "before-restore": return "Before restore"
+        case "before-icloud": return "Before iCloud"
+        case "before-sync-migration": return "Before update"
         default: return backup.label.replacingOccurrences(of: "-", with: " ").capitalized
         }
     }

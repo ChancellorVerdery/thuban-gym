@@ -1,0 +1,8 @@
+// Thuban Gym (iOS). See Base.xcconfig. Simulator builds (scripts/ios_build.sh) pass THUBAN_SIGNED=NO and build
+// unsigned; device builds (scripts/ios_install.sh) sign automatically with the team.
+#include "Base.xcconfig"
+
+CODE_SIGN_ENTITLEMENTS = $(THUBAN_IOS_ENTITLEMENTS_$(THUBAN_SIGNED))
+THUBAN_IOS_ENTITLEMENTS_NO =
+THUBAN_IOS_ENTITLEMENTS_YES = GymiOS/Resources/GymiOS-iCloud.entitlements
+CODE_SIGN_STYLE = Automatic

@@ -2,12 +2,14 @@
 # Installs Thuban Gym for iOS:
 #  1. a Release simulator build into the simulator "Thuban iPhone" (iPhone 17, iOS 26.5; created when missing).
 #     A simulator that was shut down is shut down again afterwards (the app stays installed).
-#  2. ONLY when `xcrun devicectl list devices` shows a paired iPhone AND DEVELOPMENT_TEAM is set: a signed Release
-#     device build installed on that iPhone. Otherwise it prints how to enable that.
+#  2. ONLY when `xcrun devicectl list devices` shows a paired iPhone AND a team is set (Config/Signing.xcconfig or
+#     $DEVELOPMENT_TEAM): a signed Release device build, with iCloud Sync, installed on that iPhone. Otherwise it
+#     prints how to enable that.
 # Usage: [DEVELOPMENT_TEAM=<team id>] [DEVICE=<devicectl id or name>] scripts/ios_install.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
 source scripts/ios_sim.sh
+source scripts/signing.sh
 export PATH="$HOME/.local/bin:$PATH"
 
 # --- Simulator ---------------------------------------------------------------------------------------------------
@@ -42,26 +44,25 @@ PY
 )"
 rm -f "$JSON"
 
-if [[ -z "$PHONE" || -z "${DEVELOPMENT_TEAM:-}" ]]; then
+if [[ -z "$PHONE" || -z "$TEAM" ]]; then
   REASON="no paired iPhone found"
-  [[ -n "$PHONE" ]] && REASON="no DEVELOPMENT_TEAM set"
+  [[ -n "$PHONE" ]] && REASON="no team set"
   echo
   echo "Device install skipped ($REASON). To install on your iPhone:"
-  echo "  1. Xcode ▸ Settings ▸ Accounts: add your Apple ID (a free account works; its apps expire after 7 days)."
+  echo "  1. Xcode ▸ Settings ▸ Accounts: add your Apple ID (iCloud Sync needs the paid developer team)."
   echo "  2. Connect the iPhone by cable, unlock it, tap Trust, and turn on Developer Mode"
   echo "     (Settings ▸ Privacy & Security ▸ Developer Mode) when iOS asks."
-  echo "  3. Find your team id (Xcode ▸ Settings ▸ Accounts ▸ the team), then run:"
-  echo "       DEVELOPMENT_TEAM=<team id> scripts/ios_install.sh"
+  echo "  3. Put your team id in Config/Signing.xcconfig (copy Config/Signing.example.xcconfig), then run:"
+  echo "       scripts/ios_install.sh"
   exit 0
 fi
 
 echo
-echo "Building for the iPhone ($PHONE), team $DEVELOPMENT_TEAM…"
+echo "Building for the iPhone ($PHONE), team $TEAM…"
 DERIVED=.build/DerivedData-iOS-Device
 mkdir -p "$DERIVED"
 xcodebuild -project ThubanGym.xcodeproj -scheme GymiOS -configuration Release -derivedDataPath "$DERIVED" \
-  -destination 'generic/platform=iOS' -allowProvisioningUpdates \
-  DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" CODE_SIGN_STYLE=Automatic build > "$DERIVED/xcodebuild.log" 2>&1
+  -destination 'generic/platform=iOS' "${SIGN_ARGS[@]}" CODE_SIGN_STYLE=Automatic build > "$DERIVED/xcodebuild.log" 2>&1
 if ! grep -q "\*\* BUILD SUCCEEDED \*\*" "$DERIVED/xcodebuild.log"; then
   grep -E "error: " "$DERIVED/xcodebuild.log" | sort -u | head -20
   echo "Device build failed (see $DERIVED/xcodebuild.log)."
