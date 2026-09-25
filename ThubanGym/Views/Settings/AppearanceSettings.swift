@@ -18,15 +18,8 @@ struct AppearanceSettings: View {
                 )
             }
 
-            SettingsGroup("Scheme", caption: "The eight Thuban schemes. Brass is the default.") {
-                let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(SchemeCardModel.cards(for: app.themeSelection).filter { $0.id != ThubanScheme.customId }) { card in
-                        SchemeCard(card: card, isSelected: card.id == app.themeSelection.schemeId) {
-                            app.selectScheme(id: card.id)
-                        }
-                    }
-                }
+            SettingsGroup("Scheme", caption: "The eight Thuban schemes. Brass is the default. Mode follows macOS unless you pick Light or Dark.") {
+                SchemeGrid()
             }
 
             SettingsGroup("Text size", caption: "Scales body text on every screen.") {
