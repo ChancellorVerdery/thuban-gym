@@ -10,7 +10,7 @@ struct ProgressChartCard: View {
     var range: ProgressRange
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 14) {
                 Eyebrow("Strength score · weekly")
                 Spacer(minLength: 0)
@@ -22,11 +22,12 @@ struct ProgressChartCard: View {
                 }
             }
             StrengthChart(points: app.weeklyStrengthSeries(range).map { StrengthPoint(date: $0.date, score: $0.score) })
-                .frame(height: 226)
+                .frame(height: 240)
+                .padding(.top, 4)
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
-        .padding(.bottom, 8)
+        .padding(.bottom, 12)
         .thubanPanel(padding: 0)
     }
 
@@ -123,7 +124,9 @@ struct StrengthChart: View {
         return first...last
     }
 
-    /// Round gridlines (step 1 / 2 / 5 / 10 / 20 / 25 / 50) around the data and the 100 baseline.
+    /// Round gridlines (step 1 / 2 / 5 / 10 / 20 / 25 / 50) around the data and the 100 baseline. The domain runs a
+    /// quarter step past the top gridline, so the top label and the "today" annotation sit inside the plot rather
+    /// than against the card's header.
     struct YScale {
         var low: Double
         var high: Double
@@ -141,6 +144,7 @@ struct StrengthChart: View {
             if high - hi < step * 0.25 { high += step }
             if high <= low { high = low + step }
             ticks = stride(from: low, through: high, by: step).map { $0 }
+            high += step * 0.25
         }
     }
 }

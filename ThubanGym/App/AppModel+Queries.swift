@@ -20,8 +20,15 @@ extension AppModel {
 
     // MARK: Plan
 
-    /// Today's plan entry (done / in progress / planned / skipped / swapped / rest …).
-    var todayPlan: PlanDay { PlanEngine.day(data, on: today, today: today) }
+    /// The day Today shows and logs against: normally `today`, but a session that runs past midnight keeps its own
+    /// date until it is finished (so its sets, its completion and the Today screen stay on one day).
+    var sessionDay: DayKey {
+        if let session = data.activeSession, session.date < today { return session.date }
+        return today
+    }
+
+    /// Today's plan entry (done / in progress / planned / skipped / swapped / rest …), for `sessionDay`.
+    var todayPlan: PlanDay { PlanEngine.day(data, on: sessionDay, today: sessionDay) }
 
     func planDay(_ date: DayKey) -> PlanDay { PlanEngine.day(data, on: date, today: today) }
 
@@ -68,7 +75,7 @@ extension AppModel {
 
     /// The workout's exercises then the day's extras. `workoutId` nil → the workout shown for that day.
     func sessionExercises(on date: DayKey, workoutId: String? = nil) -> [SessionExercise] {
-        PlanEngine.sessionExercises(data, workoutId: workoutId ?? planDay(date).workout?.id, on: date)
+        PlanEngine.sessionExercises(data, workoutId: workoutId ?? (date == sessionDay ? todayPlan : planDay(date)).workout?.id, on: date)
     }
 
     /// Sets logged for an exercise on a day and side (nil = bilateral).

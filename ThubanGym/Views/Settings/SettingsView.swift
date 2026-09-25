@@ -29,9 +29,18 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // No title bar: this strip keeps the window draggable from the top of the pane.
+            .overlay(alignment: .top) {
+                Color.clear
+                    .frame(height: 28)
+                    .contentShape(Rectangle())
+                    .gesture(WindowDragGesture())
+                    .allowsWindowActivationEvents(true)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bgColor)
+        .ignoresSafeArea()
         .environment(\.thubanTheme, theme)
         .environment(\.thubanTextScale, app.preferences.textSize.scale)
         .preferredColorScheme(theme.isDark ? .dark : .light)
@@ -69,7 +78,8 @@ private struct SettingsNav: View {
                 .padding(.horizontal, 8)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 26)
+        .padding(.top, 26 + 28) // clears the traffic lights (no title bar)
+        .padding(.bottom, 26)
         .frame(width: 280)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(theme.panelColor)

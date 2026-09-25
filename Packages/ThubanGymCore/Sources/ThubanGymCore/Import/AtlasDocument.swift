@@ -77,8 +77,9 @@ public struct AtlasDocument: Decodable, Sendable, Equatable {
 
     public struct LogRow: Decodable, Sendable, Equatable {
         public var id: String?
-        public var exerciseId: String
-        public var date: String
+        /// Nullable in Atlas's DDL; a row without one is skipped (with a warning) by the converter.
+        public var exerciseId: String?
+        public var date: String?
         public var side: String?
         public var sets: [SetRow]
 
@@ -87,8 +88,8 @@ public struct AtlasDocument: Decodable, Sendable, Equatable {
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decodeIfPresent(String.self, forKey: .id)
-            exerciseId = try c.decode(String.self, forKey: .exerciseId)
-            date = try c.decode(String.self, forKey: .date)
+            exerciseId = try c.decodeIfPresent(String.self, forKey: .exerciseId)
+            date = try c.decodeIfPresent(String.self, forKey: .date)
             side = try c.decodeIfPresent(String.self, forKey: .side)
             // jsonb: normally an array of {weight, reps}; tolerate null or a JSON-encoded string.
             if let sets = try? c.decodeIfPresent([SetRow].self, forKey: .sets) {
@@ -103,8 +104,9 @@ public struct AtlasDocument: Decodable, Sendable, Equatable {
     }
 
     public struct CompletionRow: Decodable, Sendable, Equatable {
-        public var workoutId: String
-        public var date: String
+        /// Both nullable in Atlas's DDL; a row missing either is skipped (with a warning) by the converter.
+        public var workoutId: String?
+        public var date: String?
         /// Epoch milliseconds (numeric in Atlas).
         public var ts: Double?
         public var startTime: String?
@@ -114,8 +116,8 @@ public struct AtlasDocument: Decodable, Sendable, Equatable {
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            workoutId = try c.decode(String.self, forKey: .workoutId)
-            date = try c.decode(String.self, forKey: .date)
+            workoutId = try c.decodeIfPresent(String.self, forKey: .workoutId)
+            date = try c.decodeIfPresent(String.self, forKey: .date)
             ts = c.lenientDouble(.ts)
             startTime = try c.decodeIfPresent(String.self, forKey: .startTime)
             endTime = try c.decodeIfPresent(String.self, forKey: .endTime)

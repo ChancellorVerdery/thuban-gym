@@ -14,7 +14,7 @@ struct TodayView: View {
             TodayFirstRun()
         } else {
             let plan = app.todayPlan
-            let items = visibleItems(plan)
+            let items = app.todayVisibleItems(plan)
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
                     TodayHeader(plan: plan, items: items)
@@ -24,7 +24,7 @@ struct TodayView: View {
                     ScrollView {
                         VStack(spacing: 10) {
                             TodayDayPanel(plan: plan, hasItems: !items.isEmpty)
-                            cards(items)
+                            cards(items, finished: plan.status == .done || plan.status == .restDone)
                         }
                         .padding(.horizontal, 32)
                         .padding(.bottom, 24)
@@ -38,19 +38,16 @@ struct TodayView: View {
         }
     }
 
-    /// A skipped day shows only what was pulled in by hand (the planned workout's exercises are not on today).
-    private func visibleItems(_ plan: PlanDay) -> [SessionExercise] {
-        let all = app.sessionExercises(on: app.today)
-        return plan.status == .skipped ? all.filter(\.isExtra) : all
-    }
-
+    /// While a session runs (or before one starts): the focused card and the one up next are expanded. Once the day
+    /// is finished every card is a summary row, with no focus and no "Up next", until one is tapped to edit it (or the
+    /// session is resumed).
     @ViewBuilder
-    private func cards(_ items: [SessionExercise]) -> some View {
-        let focusId = app.todayFocusId(items)
+    private func cards(_ items: [SessionExercise], finished: Bool) -> some View {
+        let focusId = finished ? app.focusedExerciseId : app.todayFocusId(items)
         let focusIndex = items.firstIndex { $0.id == focusId } ?? 0
-        let upNextId = items.enumerated().first { $0.offset > focusIndex && !app.todayIsFinished($0.element.exercise) }?.element.id
+        let upNextId = finished ? nil : items.enumerated().first { $0.offset > focusIndex && !app.todayIsFinished($0.element.exercise) }?.element.id
         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-            TodayExerciseCard(item: item, number: index + 1, date: app.today,
+            TodayExerciseCard(item: item, number: index + 1, date: app.sessionDay,
                               isFocused: item.id == focusId, isUpNext: item.id == upNextId,
                               isExpanded: item.id == focusId || item.id == upNextId)
         }
@@ -85,8 +82,9 @@ struct TodayHeader: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 12)
-            if !items.isEmpty {
-                let progress = app.todayProgress(items)
+            let progress = app.todayProgress(items)
+            // A skipped day has no target to count against unless something was logged on it anyway.
+            if !items.isEmpty, plan.status != .skipped || progress.logged > 0 {
                 HStack(spacing: 0) {
                     Text(String(progress.logged))
                         .font(ThubanFont.mono(13.5, weight: .semibold))
@@ -102,7 +100,7 @@ struct TodayHeader: View {
     }
 
     private var eyebrow: String {
-        var parts = [GymFormat.longDay(app.today)]
+        var parts = [GymFormat.longDay(app.sessionDay)]
         switch plan.status {
         case .skipped:
             parts.append("Skipped")
@@ -111,7 +109,7 @@ struct TodayHeader: View {
         case .done, .restDone:
             parts.append("Done")
         default:
-            if let position = app.cyclePosition(on: app.today) {
+            if let position = app.cyclePosition(on: app.sessionDay) {
                 parts.append("Cycle day \(position.index + 1) of \(position.count)")
             } else if plan.status == .inProgress, let planned = plan.plannedWorkout, planned.id != plan.workout?.id {
                 parts.append("Swapped for \(planned.name)")
@@ -152,7 +150,7 @@ struct TodayHeader: View {
         if planned > 0 { parts.append("\(planned) sets") }
         if let last = app.todayLastCompletion(of: workout.id) {
             var text = "last \(workout.name) \(GymFormat.shortDay(last.date))"
-            if let minutes = last.durationMinutes { text += ", \(minutes) min" }
+            if let minutes = last.durationMinutes { text += ", \(GymFormat.minutes(minutes))" }
             parts.append(text)
         } else if !workout.isRest {
             parts.append("first \(workout.name)")
@@ -296,10 +294,7 @@ struct TodayFirstRun: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 460)
             HStack(spacing: 10) {
-                Button { app.openSettings(.importAtlas) } label: {
-                    HStack(spacing: 7) { Icon(.download, size: 15); Text("Import from Atlas") }
-                }
-                .buttonStyle(.thubanPrimary)
+                ImportFromAtlasButton()
                 Button { app.section = .workouts } label: {
                     HStack(spacing: 7) { Icon(.plus, size: 15); Text("Create a workout") }
                 }

@@ -28,6 +28,7 @@ struct ThubanGymApp: App {
                         .keyboardShortcut(KeyEquivalent(section.shortcut), modifiers: .command)
                 }
             }
+            TodaySessionCommands(app: appModel)
         }
 
         Window("Settings", id: "settings") {
@@ -35,6 +36,7 @@ struct ThubanGymApp: App {
                 .environment(appModel)
                 .frame(minWidth: 900, minHeight: 620)
         }
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1100, height: 760)
     }

@@ -15,7 +15,7 @@ struct PlanSettings: View {
             SettingsGroup("Plan type", caption: planCaption) {
                 SegmentedPicker(
                     selection: Binding(get: { app.plan.type }, set: { app.setPlanType($0) }),
-                    options: PlanType.allCases.map { SegmentOption($0, $0.label) },
+                    options: PlanType.allCases.map { SegmentOption($0, $0.label, icon: $0 == .weekly ? .calendar : .plan) },
                     segmentHeight: 28
                 )
                 .fixedSize()

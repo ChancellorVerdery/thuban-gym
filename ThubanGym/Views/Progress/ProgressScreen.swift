@@ -36,7 +36,7 @@ private struct ProgressMainColumn: View {
     var body: some View {
         let range = app.progressRange
         VStack(alignment: .leading, spacing: 16) {
-            PageHeader(eyebrow: app.progressEyebrow(range), title: title,
+            PageHeader(eyebrow: app.progressEyebrow(range), title: title(range),
                        subtitle: "Strength score is the average of every exercise's index, so a curl counts as much as a squat. 100 is your first logged session.")
             ProgressTiles(range: range)
             ProgressChartCard(range: range)
@@ -47,10 +47,11 @@ private struct ProgressMainColumn: View {
         .padding(.vertical, 22)
     }
 
-    private var title: String {
-        guard let gain = app.strengthGainPercent else { return "No score yet" }
+    private func title(_ range: ProgressRange) -> String {
+        guard let gain = app.strengthGainPercent(range) else { return "No score yet" }
         let text = String(format: "%.1f%%", abs(gain))
-        if abs(gain) < 0.05 { return "Level with your first session" }
+        let sinceFirst = app.progressStart(range) == app.firstActivity
+        if abs(gain) < 0.05 { return sinceFirst ? "Level with your first session" : "Level over this range" }
         return gain > 0 ? "Stronger by \(text)" : "Weaker by \(text)"
     }
 }
@@ -76,7 +77,7 @@ private struct ProgressTiles: View {
                          value: GymFormat.grouped(app.progressSessionCount(range)),
                          caption: app.progressStart(range).map { "since \(GymFormat.monthDay($0))" } ?? "none yet")
             ProgressTile(label: "Avg session",
-                         value: (recentAverage ?? allAverage).map { "\($0) min" } ?? "–",
+                         value: (recentAverage ?? allAverage).map(GymFormat.minutes) ?? "–",
                          caption: averageCaption(recent: recentAverage, all: allAverage))
             ProgressTile(label: "On plan",
                          value: "\(adherence.done) of \(adherence.planned)",
@@ -137,8 +138,7 @@ private struct ProgressEmptyState: View {
                     : "Log a session on Today. Your first session sets every exercise to 100, and the strength score grows from there.") {
             HStack(spacing: 10) {
                 if app.isFirstRun {
-                    Button("Import from Atlas…") { app.openSettings(.importAtlas) }
-                        .buttonStyle(.thubanPrimary)
+                    ImportFromAtlasButton()
                 }
                 Button("Go to Today") { app.section = .today }
                     .buttonStyle(.thubanSecondary)

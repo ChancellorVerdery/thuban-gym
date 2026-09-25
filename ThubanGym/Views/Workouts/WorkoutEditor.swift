@@ -111,7 +111,7 @@ struct WorkoutEditor: View {
             return workout.kind == .rest ? "Rest day · completes itself at midnight in a cycle" : "Not done yet"
         }
         var parts = ["\(AppModel.plural(done.count, "session")) since \(GymFormat.monthDay(first.date))"]
-        if app.hasTimedSessions(workout.id) { parts.append("average \(app.workoutDuration(workout.id)) min") }
+        if app.hasTimedSessions(workout.id) { parts.append("average \(GymFormat.minutes(app.workoutDuration(workout.id)))") }
         parts.append("last done \(last.date == app.today ? "today" : last.date.planShort)")
         return parts.joined(separator: " · ")
     }

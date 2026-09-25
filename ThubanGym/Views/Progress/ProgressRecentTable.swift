@@ -117,12 +117,12 @@ private struct RecentRow: View {
     @ViewBuilder
     private var length: some View {
         if row.isLive {
-            Text(row.minutes.map { "\($0) min" } ?? "now")
+            Text(row.minutes.map(GymFormat.minutes) ?? "now")
                 .monospacedDigit()
                 .fixedSize()
                 .thubanChip(kind: .signal)
         } else {
-            Text(row.minutes.map { "\($0) min" } ?? "–")
+            Text(row.minutes.map(GymFormat.minutes) ?? "–")
                 .font(ThubanFont.mono(13.5 * textScale))
                 .foregroundStyle(theme.inkColor)
         }

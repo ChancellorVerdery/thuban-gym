@@ -2,7 +2,7 @@ import Foundation
 import ThubanGymCore
 
 /// Every write a view may make. Each one goes through `mutate`, which saves gym.json atomically — there is no
-/// separate "save" call. Dates default to `today`; weights are ALWAYS kg (convert typed values with
+/// separate "save" call. Dates default to `today` (set logging and extras: `sessionDay`); weights are ALWAYS kg (convert typed values with
 /// `kilograms(fromDisplay:)`).
 extension AppModel {
     // MARK: Logging sets
@@ -10,21 +10,21 @@ extension AppModel {
     /// Appends a set; returns its index. `weightKg` nil = bodyweight. `side` .left / .right for unilateral.
     @discardableResult
     func logSet(exerciseId: String, date: DayKey? = nil, side: Side? = nil, weightKg: Double?, reps: Int) -> Int {
-        mutate { $0.logSet(exerciseId: exerciseId, date: date ?? today, side: side, weightKg: weightKg, reps: reps) }
+        mutate { $0.logSet(exerciseId: exerciseId, date: date ?? sessionDay, side: side, weightKg: weightKg, reps: reps) }
     }
 
     /// Replaces set `index` (no-op when it does not exist).
     func updateSet(exerciseId: String, date: DayKey? = nil, side: Side? = nil, index: Int, weightKg: Double?, reps: Int) {
-        mutate { try? $0.updateSet(exerciseId: exerciseId, date: date ?? today, side: side, index: index, weightKg: weightKg, reps: reps) }
+        mutate { try? $0.updateSet(exerciseId: exerciseId, date: date ?? sessionDay, side: side, index: index, weightKg: weightKg, reps: reps) }
     }
 
     func removeSet(exerciseId: String, date: DayKey? = nil, side: Side? = nil, index: Int) {
-        mutate { $0.removeSet(exerciseId: exerciseId, date: date ?? today, side: side, index: index) }
+        mutate { $0.removeSet(exerciseId: exerciseId, date: date ?? sessionDay, side: side, index: index) }
     }
 
     /// Removes every set of an exercise on a day (both sides).
     func clearLogs(exerciseId: String, date: DayKey? = nil) {
-        mutate { $0.clearLogs(exerciseId: exerciseId, date: date ?? today) }
+        mutate { $0.clearLogs(exerciseId: exerciseId, date: date ?? sessionDay) }
     }
 
     // MARK: Sessions and completion
@@ -43,6 +43,7 @@ extension AppModel {
     func finishSession(at end: Date = Date()) -> FinishReceipt? {
         let receipt = mutate { $0.finishSession(at: end) }
         lastFinish = receipt
+        focusedExerciseId = nil // a finished day shows every card collapsed
         return receipt
     }
 
@@ -91,11 +92,11 @@ extension AppModel {
 
     /// Pull an exercise from another workout into a day's session.
     func addExtra(exerciseId: String, date: DayKey? = nil) {
-        mutate { $0.addExtra(exerciseId: exerciseId, date: date ?? today) }
+        mutate { $0.addExtra(exerciseId: exerciseId, date: date ?? sessionDay) }
     }
 
     func removeExtra(exerciseId: String, date: DayKey? = nil) {
-        mutate { $0.removeExtra(exerciseId: exerciseId, date: date ?? today) }
+        mutate { $0.removeExtra(exerciseId: exerciseId, date: date ?? sessionDay) }
     }
 
     // MARK: Plan

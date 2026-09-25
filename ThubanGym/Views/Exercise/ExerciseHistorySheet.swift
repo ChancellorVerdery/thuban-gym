@@ -104,7 +104,7 @@ struct ExerciseHistorySheet: View {
                          caption: "\(bestSetText(first)) on \(GymFormat.monthDay(first.date))", tone: .dim)
             ExerciseTile(label: "Index", value: String(format: "%.1f", index),
                          caption: "\(GymFormat.delta(indexChange)) since \(GymFormat.month(first.date))",
-                         tone: indexChange >= 0 ? .pos : .neg)
+                         tone: { switch GymFormat.tone(for: indexChange) { case .pos: return .pos; case .neg: return .neg; case .neutral: return .dim } }())
             nextTargetTile(history)
         }
     }
@@ -203,7 +203,7 @@ struct ExerciseChart: View {
         @Bindable var app = app
         let points = self.points
         let baseline = points.first?.value
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Eyebrow(title)
                 Spacer()
@@ -219,6 +219,7 @@ struct ExerciseChart: View {
             } else {
                 chart(points, baseline: baseline)
                     .frame(height: 220)
+                    .padding(.top, 4)
             }
         }
     }
@@ -279,7 +280,8 @@ struct ExerciseChart: View {
                         .foregroundStyle(theme.inkColor)
                 }
         }
-        .chartYScale(domain: (low - pad)...(high + pad))
+        .chartYScale(domain: (low - pad)...(high + pad * 1.6))
+        .chartPlotStyle { plot in plot.padding(.top, 8) }
         .chartYAxis {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 1)).foregroundStyle(theme.lineColor)

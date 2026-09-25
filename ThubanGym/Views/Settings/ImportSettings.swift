@@ -79,7 +79,7 @@ private struct ImportCard: View {
             }
             if let note = footnote {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Icon(.progress, size: 14).foregroundStyle(theme.inkDimColor).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                    Icon(.info, size: 14).foregroundStyle(theme.inkDimColor).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
                     Text(note)
                         .font(.system(size: 13))
                         .foregroundStyle(theme.inkDimColor)
@@ -140,16 +140,44 @@ private struct ImportCard: View {
             }
         case .done(let summary, let backup):
             VStack(alignment: .leading, spacing: 10) {
-                topRow(title: "Imported", titleColor: theme.posTextColor,
-                       detail: backup.map { "previous data saved as \($0.lastPathComponent)" } ?? "\(GymFormat.grouped(summary.sets)) sets · nothing to back up",
-                       mono: true) {
-                    if let backup {
-                        Button("Show backup") { NSWorkspace.shared.activateFileViewerSelecting([backup]) }
-                            .buttonStyle(SecondaryButtonStyle(height: 32))
+                if let backup {
+                    // The file name gets its own one-line Text so it never breaks inside the name.
+                    let name = backup.lastPathComponent
+                    HStack(alignment: .center, spacing: 16) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text("Imported")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(theme.posTextColor)
+                                .fixedSize()
+                            Text("previous data saved as")
+                                .font(ThubanFont.mono(13))
+                                .foregroundStyle(theme.inkDimColor)
+                                .fixedSize()
+                            Text(name)
+                                .font(ThubanFont.mono(13))
+                                .foregroundStyle(theme.inkDimColor)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(name)
+                                .textSelection(.enabled)
+                                .layoutPriority(-1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) {
+                            Button("Show backup") { NSWorkspace.shared.activateFileViewerSelecting([backup]) }
+                                .buttonStyle(SecondaryButtonStyle(height: 32))
+                            Button("Done") { app.cancelImport() }
+                                .buttonStyle(PrimaryButtonStyle(height: 32))
+                                .keyboardShortcut(.defaultAction)
+                        }
                     }
-                    Button("Done") { app.cancelImport() }
-                        .buttonStyle(PrimaryButtonStyle(height: 32))
-                        .keyboardShortcut(.defaultAction)
+                } else {
+                    topRow(title: "Imported", titleColor: theme.posTextColor,
+                           detail: "\(GymFormat.grouped(summary.sets)) sets · nothing to back up", mono: true) {
+                        Button("Done") { app.cancelImport() }
+                            .buttonStyle(PrimaryButtonStyle(height: 32))
+                            .keyboardShortcut(.defaultAction)
+                    }
                 }
                 ProgressBar(value: 1, tint: theme.posColor)
             }

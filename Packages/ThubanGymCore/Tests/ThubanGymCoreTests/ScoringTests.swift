@@ -129,7 +129,14 @@ final class ScoringTests: XCTestCase {
         XCTAssertEqual(GymFormat.clockRange(start: "17:40", end: "18:44"), "5:40 – 6:44 PM")
         XCTAssertEqual(GymFormat.elapsed(1872), "31:12")
         XCTAssertEqual(GymFormat.shortDay(today), "Thu Sep 24")
-        XCTAssertEqual(GymFormat.minutes(65), "1 h 5 min")
+        XCTAssertEqual(GymFormat.minutes(65), "65 min")
+        XCTAssertEqual(GymFormat.minutes(60), "60 min")
+        XCTAssertEqual(GymFormat.tone(for: 0.04), .neutral)
+        XCTAssertEqual(GymFormat.tone(for: -0.04), .neutral)
+        XCTAssertEqual(GymFormat.tone(for: 0.06), .pos)
+        XCTAssertEqual(GymFormat.tone(for: -0.2), .neg)
+        XCTAssertEqual(GymFormat.tone(for: 0, decimals: 0), .neutral)
+        XCTAssertEqual(GymFormat.minutes(185), "3 h 5 min")
     }
 
     func testStats() {

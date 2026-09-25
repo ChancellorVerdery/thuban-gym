@@ -157,6 +157,14 @@ public struct AtlasImporter: Sendable {
 
     // MARK: Convert
 
+    /// Maps Atlas's cycle pointer (an index into its full slot list, empty slots included) onto the list of slots
+    /// that survived the import: the first surviving slot at or after it, wrapping around.
+    static func alignedCyclePosition(atlasPosition: Int, atlasCount: Int, survivingIndexes: [Int]) -> Int {
+        guard !survivingIndexes.isEmpty, atlasCount > 0 else { return 0 }
+        let pointer = ((atlasPosition % atlasCount) + atlasCount) % atlasCount
+        return survivingIndexes.firstIndex { $0 >= pointer } ?? 0
+    }
+
     /// Builds a fresh `GymData` from the document (arrays in Atlas `ord` order). Orphans are dropped with a warning,
     /// duplicate log rows merged, bodyweight inferred from sets without weight. Weights are kept exactly (kg).
     public static func convert(_ document: AtlasDocument, source: String, now: Date = Date()) throws -> AtlasImport {
@@ -190,21 +198,21 @@ public struct AtlasImporter: Sendable {
         var logIndex: [String: Int] = [:]
         var badLogs = 0
         for row in document.logs {
-            guard let date = DayKey(row.date) else { badLogs += 1; continue }
+            guard let exerciseId = row.exerciseId, !exerciseId.isEmpty, let date = row.date.flatMap(DayKey.init) else { badLogs += 1; continue }
             let rawSide = row.side?.trimmingCharacters(in: .whitespaces).uppercased() ?? ""
             let side: Side? = rawSide.isEmpty ? nil : Side(rawValue: rawSide)
             if !rawSide.isEmpty && side == nil { badLogs += 1; continue }
             let sets = row.sets.filter { $0.reps > 0 || ($0.weight ?? 0) > 0 }.map { SetEntry(weight: $0.weight, reps: $0.reps) }
             guard !sets.isEmpty else { continue }
-            let key = "\(row.exerciseId)|\(date.rawValue)|\(side?.rawValue ?? "")"
+            let key = "\(exerciseId)|\(date.rawValue)|\(side?.rawValue ?? "")"
             if let index = logIndex[key] {
                 logs[index].sets.append(contentsOf: sets)
             } else {
                 logIndex[key] = logs.count
-                logs.append(LogEntry(id: row.id ?? GymID.make("gl"), exerciseId: row.exerciseId, date: date, side: side, sets: sets))
+                logs.append(LogEntry(id: row.id ?? GymID.make("gl"), exerciseId: exerciseId, date: date, side: side, sets: sets))
             }
         }
-        warn(badLogs, "log rows with an unreadable date or side were skipped")
+        warn(badLogs, "log rows with a missing exercise or an unreadable date or side were skipped")
 
         // Bodyweight: an exercise whose every logged set has no weight.
         let weightedIds = Set(logs.filter { $0.sets.contains { $0.weight != nil } }.map(\.exerciseId))
@@ -217,13 +225,13 @@ public struct AtlasImporter: Sendable {
         var completions: [Completion] = []
         var badCompletions = 0
         for row in document.completions {
-            guard let date = DayKey(row.date) else { badCompletions += 1; continue }
+            guard let workoutId = row.workoutId, !workoutId.isEmpty, let date = row.date.flatMap(DayKey.init) else { badCompletions += 1; continue }
             let start = ClockTime.minutes(row.startTime).map(ClockTime.string(minutes:)) ?? ""
             let end = ClockTime.minutes(row.endTime).map(ClockTime.string(minutes:)) ?? ""
             let ts = row.ts ?? date.date(hour: 12).timeIntervalSince1970 * 1000
-            completions.append(Completion(workoutId: row.workoutId, date: date, ts: ts, start: start, end: end))
+            completions.append(Completion(workoutId: workoutId, date: date, ts: ts, start: start, end: end))
         }
-        warn(badCompletions, "completions with an unreadable date were skipped")
+        warn(badCompletions, "completions with a missing workout or an unreadable date were skipped")
 
         // Settings
         let settingsRow = document.settings ?? AtlasDocument.SettingsRow()
@@ -242,12 +250,20 @@ public struct AtlasImporter: Sendable {
             guard let day = Weekday(rawValue: row.day.lowercased()), let id = row.workoutId, seenWorkouts.contains(id) else { continue }
             weekly[day.rawValue] = id
         }
-        let cycleIds = document.planCycle.compactMap(\.workoutId)
-        let cycle = cycleIds.filter { seenWorkouts.contains($0) }
-        warn(cycleIds.count - cycle.count, "cycle slots point at a missing workout and were dropped")
+        // Cycle: Atlas keeps empty (NULL) slots and its pointer indexes the full list, so remember each surviving
+        // slot's Atlas index and re-aim the pointer at the first survivor at or after Atlas's (wrapping).
+        var cycle: [String] = []
+        var atlasIndexes: [Int] = []
+        for (index, row) in document.planCycle.enumerated() {
+            guard let id = row.workoutId, seenWorkouts.contains(id) else { continue }
+            cycle.append(id)
+            atlasIndexes.append(index)
+        }
+        warn(document.planCycle.count - cycle.count, "cycle slots are empty or point at a missing workout and were dropped")
         let planType: PlanType = settingsRow.planType?.lowercased() == "weekly" ? .weekly : (settingsRow.planType == nil && cycle.isEmpty ? .weekly : .cycle)
         var plan = Plan(type: planType, weekly: weekly, cycle: cycle, position: 0)
-        plan.position = cycle.isEmpty ? 0 : max(0, settingsRow.cyclePosition ?? 0) % cycle.count
+        plan.position = alignedCyclePosition(atlasPosition: settingsRow.cyclePosition ?? 0, atlasCount: document.planCycle.count,
+                                             survivingIndexes: atlasIndexes)
 
         // Overrides and extras
         var overrides: [PlanOverride] = []

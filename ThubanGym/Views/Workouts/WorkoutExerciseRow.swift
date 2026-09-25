@@ -42,6 +42,7 @@ struct WorkoutExerciseRow: View {
                 .planField(height: 34, quiet: true, focused: focus == .name, size: 15 * textScale, weight: .semibold)
                 .onSubmit(commitName)
                 .accessibilityLabel("Exercise name")
+                .accessibilityValue(name)
         } target: {
             HStack(spacing: 6) {
                 TextField("3", text: $sets)
@@ -49,23 +50,23 @@ struct WorkoutExerciseRow: View {
                     .planField(height: 32, mono: true, focused: focus == .sets, alignment: .trailing)
                     .frame(width: 44)
                     .onSubmit(commitTarget)
-                    .accessibilityLabel("Sets")
+                    .accessibilityLabel("\(exercise.name) sets")
                 Text("×").foregroundStyle(theme.inkFaintColor)
                 TextField("8", text: $reps)
                     .focused($focus, equals: .reps)
                     .planField(height: 32, mono: true, focused: focus == .reps, alignment: .trailing)
                     .frame(width: 64)
                     .onSubmit(commitTarget)
-                    .accessibilityLabel("Reps")
+                    .accessibilityLabel("\(exercise.name) reps")
             }
         } unilateral: {
             PlanSwitch(isOn: Binding(get: { exercise.unilateral },
                                      set: { value in app.updateExercise(exercise.id) { $0.unilateral = value } }),
-                       label: "Unilateral, log left and right")
+                       label: "\(exercise.name) unilateral, log left and right")
         } bodyweight: {
             PlanSwitch(isOn: Binding(get: { exercise.bodyweight },
                                      set: { value in app.updateExercise(exercise.id) { $0.bodyweight = value } }),
-                       label: "Bodyweight, score by reps")
+                       label: "\(exercise.name) bodyweight, score by reps")
         } score: {
             Text(app.currentScoreText(exercise) ?? "—")
                 .font(ThubanFont.mono(14))

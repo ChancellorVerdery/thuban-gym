@@ -25,6 +25,9 @@ enum IconName: String, CaseIterable {
     case moon
     case file
     case download
+    case info
+    case calendar
+    case archive
 
     var paths: [String] {
         switch self {
@@ -45,6 +48,12 @@ enum IconName: String, CaseIterable {
         case .moon: return ["M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"]
         case .file: return ["M14 3.5H6.5A1.5 1.5 0 0 0 5 5v14a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5z", "M14 3.5v5h5", "M9 13h6", "M9 16.5h4"]
         case .download: return ["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M4.5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2"]
+        // circle r 8.5 + stem + dot
+        case .info: return ["M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0 -17 0z", "M12 11v5.5", "M12 7.8v.2"]
+        // rect 3.5,5 17×15.5 rx 2 + header rule + rings
+        case .calendar: return ["M5.5 5h13a2 2 0 0 1 2 2v11.5a2 2 0 0 1 -2 2h-13a2 2 0 0 1 -2 -2v-11.5a2 2 0 0 1 2 -2z", "M3.5 9.5h17", "M8 3v4", "M16 3v4"]
+        // lid rect 3.5,4.5 17×4 rx 1 + box + handle
+        case .archive: return ["M4.5 4.5h15a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-15a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1z", "M5 8.5v10a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5 -1.5v-10", "M10 12.5h4"]
         }
     }
 

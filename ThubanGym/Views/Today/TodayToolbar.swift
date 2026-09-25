@@ -135,7 +135,7 @@ struct TodayAddExercisePicker: View {
     @State private var query = ""
 
     var body: some View {
-        let inSession = Set(app.sessionExercises(on: app.today).map(\.id))
+        let inSession = Set(app.sessionExercises(on: app.sessionDay).map(\.id))
         let groups = app.todayExtraCandidates(excluding: inSession).compactMap { group -> (workout: Workout, exercises: [Exercise])? in
             let q = query.trimmingCharacters(in: .whitespaces).lowercased()
             let list = q.isEmpty ? group.exercises : group.exercises.filter { $0.name.lowercased().contains(q) || group.workout.name.lowercased().contains(q) }

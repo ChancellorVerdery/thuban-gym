@@ -55,7 +55,7 @@ extension AppModel {
             var parts = [Self.plural(count, "exercise")]
             let sets = plannedSets(in: workout.id)
             if sets > 0 { parts.append(Self.plural(sets, "set")) }
-            if includeDuration, hasTimedSessions(workout.id) { parts.append("avg \(workoutDuration(workout.id)) min") }
+            if includeDuration, hasTimedSessions(workout.id) { parts.append("avg \(GymFormat.minutes(workoutDuration(workout.id)))") }
             return parts.joined(separator: " · ")
         }
     }

@@ -101,7 +101,14 @@ enum SmokeHarness {
     }
 
     /// Renders the window's content view (`cacheDisplay`) to `<name>.png`. No screen-recording permission needed.
+    /// The Settings window has no title bar, and `cacheDisplay` draws its ScrollView blank there, so it is grabbed
+    /// with `screencapture -l` (the window server's own pixels) when that is permitted, else falls back.
     private static func capture(_ window: NSWindow, name: String, in directory: URL) throws {
+        let url = directory.appendingPathComponent("\(name).png")
+        if window.title == "Settings", captureWithWindowServer(window, to: url) {
+            print("smoke: \(name) (window server)")
+            return
+        }
         guard let content = window.contentView else { throw ThubanError.store("smoke: window has no content view") }
         let bounds = content.bounds
         guard let rep = content.bitmapImageRepForCachingDisplay(in: bounds) else {
@@ -109,7 +116,22 @@ enum SmokeHarness {
         }
         content.cacheDisplay(in: bounds, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { throw ThubanError.store("smoke: PNG encoding failed for \(name)") }
-        try png.write(to: directory.appendingPathComponent("\(name).png"))
+        try png.write(to: url)
         print("smoke: \(name)")
+    }
+
+    /// `screencapture -l <window> -o -x`: true when it produced a non-trivial PNG (it needs Screen Recording
+    /// permission for the launching terminal; without it the file is missing or only shows the desktop).
+    private static func captureWithWindowServer(_ window: NSWindow, to url: URL) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-l", String(window.windowNumber), "-o", "-x", url.path]
+        do { try process.run() } catch { return false }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0, let image = NSImage(contentsOf: url), image.size.width > 100 else {
+            try? FileManager.default.removeItem(at: url)
+            return false
+        }
+        return true
     }
 }

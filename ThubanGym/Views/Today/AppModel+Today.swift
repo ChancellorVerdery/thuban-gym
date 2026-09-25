@@ -7,7 +7,7 @@ extension AppModel {
     /// Sets logged for one exercise on a day, counting a unilateral L + R pair as ONE set (the target counts sets,
     /// not sides: "3 × 10" on a single-arm row is three pairs).
     func todayLoggedSets(_ exercise: Exercise, on date: DayKey? = nil) -> Int {
-        let day = date ?? today
+        let day = date ?? sessionDay
         if exercise.unilateral {
             let left = sets(exerciseId: exercise.id, date: day, side: .left).count
             let right = sets(exerciseId: exercise.id, date: day, side: .right).count
@@ -15,6 +15,22 @@ extension AppModel {
             return max(left, right) + both
         }
         return sets(exerciseId: exercise.id, date: day, side: nil).count
+    }
+
+    /// The cards Today lists. A skipped day shows only what was pulled in by hand (the planned workout's exercises
+    /// are not on today).
+    func todayVisibleItems(_ plan: PlanDay? = nil) -> [SessionExercise] {
+        let plan = plan ?? todayPlan
+        let all = sessionExercises(on: sessionDay)
+        return plan.status == .skipped ? all.filter(\.isExtra) : all
+    }
+
+    /// Moves the focused card by `step` (the Session menu's Next / Previous exercise), clamped to the list.
+    func todayMoveFocus(by step: Int) {
+        let items = todayVisibleItems()
+        guard !items.isEmpty else { return }
+        let current = items.firstIndex { $0.id == todayFocusId(items) } ?? 0
+        focusedExerciseId = items[min(max(current + step, 0), items.count - 1)].id
     }
 
     /// Target sets for an exercise (0 when the target does not parse).
@@ -40,7 +56,7 @@ extension AppModel {
 
     /// The most recent completion of a workout before `date` ("last Pull Sun Sep 20, 61 min").
     func todayLastCompletion(of workoutId: String, before date: DayKey? = nil) -> Completion? {
-        let day = date ?? today
+        let day = date ?? sessionDay
         return data.completions
             .filter { $0.workoutId == workoutId && $0.date < day }
             .max { ($0.date, $0.ts) < ($1.date, $1.ts) }
@@ -65,9 +81,9 @@ extension AppModel {
     func todayBestLift(_ items: [SessionExercise]) -> (exercise: Exercise, score: Double, delta: Double?)? {
         var best: (exercise: Exercise, score: Double, delta: Double?)?
         for item in items {
-            guard let session = session(exerciseId: item.id, on: today), session.topWeight != nil else { continue }
+            guard let session = session(exerciseId: item.id, on: sessionDay), session.topWeight != nil else { continue }
             if best == nil || session.score > best!.score {
-                let previous = previousSession(exerciseId: item.id, before: today)
+                let previous = previousSession(exerciseId: item.id, before: sessionDay)
                 best = (item.exercise, session.score, previous.map { session.score - $0.score })
             }
         }

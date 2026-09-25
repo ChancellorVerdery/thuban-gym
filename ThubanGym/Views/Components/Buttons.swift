@@ -147,3 +147,16 @@ extension ButtonStyle where Self == GhostButtonStyle {
     static var thubanGhost: GhostButtonStyle { GhostButtonStyle() }
     static var thubanGhostTinted: GhostButtonStyle { GhostButtonStyle(tinted: true) }
 }
+
+/// The one "Import from Atlas" call to action (download icon + label, primary): Today's first run and the empty
+/// Progress screen. Opens Settings → Import.
+struct ImportFromAtlasButton: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Button { app.openSettings(.importAtlas) } label: {
+            HStack(spacing: 7) { Icon(.download, size: 15); Text("Import from Atlas") }
+        }
+        .buttonStyle(.thubanPrimary)
+    }
+}

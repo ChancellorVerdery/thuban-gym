@@ -14,7 +14,7 @@ struct TodaySessionRail: View {
         VStack(alignment: .leading, spacing: 22) {
             sessionBlock
             if showsRestTimer { TodayRestTimerBox(seconds: app.restSeconds(for: plan.workout?.id)) }
-            if !items.isEmpty { statsBlock }
+            if !items.isEmpty, plan.status != .skipped || app.todayProgress(items).logged > 0 { statsBlock }
             Spacer(minLength: 0)
             planBlock
         }
@@ -27,9 +27,10 @@ struct TodaySessionRail: View {
         .thubanHairline(.leading, color: theme.lineColor)
     }
 
+    /// Only while a session is running: before it starts, once it is finished and on a skipped day there is
+    /// nothing to rest between.
     private var showsRestTimer: Bool {
-        guard let workout = plan.workout else { return !items.isEmpty }
-        return !workout.isRest || !items.isEmpty
+        app.activeSession != nil && !items.isEmpty
     }
 
     // MARK: Session
@@ -38,7 +39,7 @@ struct TodaySessionRail: View {
     private var sessionBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
             Eyebrow("Session")
-            if let session = app.activeSession, session.date == app.today {
+            if let session = app.activeSession, session.date == app.sessionDay {
                 running(session)
             } else if let receipt = app.lastFinish, receipt.completion.date == app.today {
                 finished(receipt.completion, canResume: true)
@@ -118,7 +119,7 @@ struct TodaySessionRail: View {
             saved += " · \(workout.name) done"
         }
         return VStack(alignment: .leading, spacing: 0) {
-            bigNumber(completion.durationMinutes.map { "\($0) min" } ?? "Done")
+            bigNumber(completion.durationMinutes.map(GymFormat.minutes) ?? "Done")
                 .padding(.top, 8)
                 .padding(.bottom, 2)
             line(saved)
@@ -191,7 +192,7 @@ struct TodaySessionRail: View {
     private var statsBlock: some View {
         let progress = app.todayProgress(items)
         let ids = items.map(\.id)
-        let volume = app.todayVolume(exerciseIds: ids, on: app.today)
+        let volume = app.todayVolume(exerciseIds: ids, on: app.sessionDay)
         let lastVolume = plan.workout.flatMap { app.todayLastVolume(of: $0.id) }
         let best = app.todayBestLift(items)
         let score = app.strengthScore()
@@ -206,17 +207,36 @@ struct TodaySessionRail: View {
                 let delta = best.delta.map { app.unit.fromKilograms($0) }
                 statRow("Best e1RM", value: "\(app.score(best.score, bodyweight: false)) \(app.unit.label)",
                         caption: "\(best.exercise.name)" + (delta.map { " · \(GymFormat.delta($0))" } ?? ""),
-                        tone: (delta ?? 0) >= 0 ? .pos : .neg)
+                        tone: Tone(delta.map { GymFormat.tone(for: $0) }))
             } else {
                 statRow("Best e1RM", value: "—", caption: "log a weighted set", tone: .faint)
             }
             statRow("Strength score", value: score.map { String(format: "%.1f", $0) } ?? "—",
                     caption: change.map { "\(GymFormat.delta($0)) in 4 weeks" },
-                    tone: (change ?? 0) >= 0 ? .pos : .neg)
+                    tone: Tone(change.map { GymFormat.tone(for: $0) }))
         }
     }
 
-    private enum Tone { case faint, pos, neg }
+    private enum Tone {
+        case faint, pos, neg, neutral
+        init(_ tone: DeltaTone?) {
+            switch tone {
+            case .pos: self = .pos
+            case .neg: self = .neg
+            case .neutral: self = .neutral
+            case nil: self = .faint
+            }
+        }
+    }
+
+    private func captionColor(_ tone: Tone) -> Color {
+        switch tone {
+        case .pos: return theme.toneTextColor(.pos)
+        case .neg: return theme.toneTextColor(.neg)
+        case .neutral: return theme.toneTextColor(.neutral)
+        case .faint: return theme.inkFaintColor
+        }
+    }
 
     private func statRow(_ label: String, value: String, caption: String? = nil, tone: Tone = .faint) -> some View {
         HStack(alignment: .firstTextBaseline) {
@@ -229,7 +249,7 @@ struct TodaySessionRail: View {
                 if let caption {
                     Text(caption)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(tone == .pos ? theme.posTextColor : (tone == .neg ? theme.negTextColor : theme.inkFaintColor))
+                        .foregroundStyle(captionColor(tone))
                         .lineLimit(1)
                 }
             }

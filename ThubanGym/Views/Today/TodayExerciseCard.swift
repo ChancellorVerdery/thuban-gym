@@ -30,6 +30,28 @@ struct TodayExerciseCard: View {
         .background(theme.panelColor, in: RoundedRectangle(cornerRadius: ThubanMetrics.cardRadius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: ThubanMetrics.cardRadius, style: .continuous)
             .strokeBorder(isFocused ? theme.line2Color : theme.lineColor, lineWidth: ThubanMetrics.hairline))
+        .onReceive(NotificationCenter.default.publisher(for: .todayLogNextSet)) { _ in
+            if isFocused { logNextSet() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .todayAddSet)) { _ in
+            if isFocused { addedRows += 1 }
+        }
+    }
+
+    /// Session → Log Next Set (⌘L): checks off the first open row with what it shows (typed or suggested).
+    private func logNextSet() {
+        if exercise.unilateral {
+            let left = app.sets(exerciseId: exercise.id, date: date, side: .left)
+            let right = app.sets(exerciseId: exercise.id, date: date, side: .right)
+            toggleUnilateral(index: min(left.count, right.count), left: left, right: right,
+                             previousLeft: previous?.left ?? [], previousRight: previous?.right ?? [])
+        } else {
+            let logged = app.sets(exerciseId: exercise.id, date: date, side: nil)
+            let previousSets = previous?.sets ?? previous?.allSets ?? []
+            let index = logged.count
+            toggleBilateral(index: index, logged: logged,
+                            fallback: suggestion(side: nil, index: index, logged: logged, previous: previousSets))
+        }
     }
 
     // MARK: Derived
@@ -125,14 +147,14 @@ struct TodayExerciseCard: View {
                     if let previous {
                         let change = todaySession.totalReps - previous.totalReps
                         Text(repChangeText(change)).fontWeight(.semibold)
-                            .foregroundStyle(change >= 0 ? theme.posTextColor : theme.negTextColor)
+                            .foregroundStyle(theme.toneTextColor(GymFormat.tone(for: Double(change), decimals: 0)))
                     }
                 } else {
                     Text("Best \(app.score(todaySession.score, bodyweight: false)) \(unitLabel)")
                     if let previous {
                         let change = app.unit.fromKilograms(todaySession.score) - app.unit.fromKilograms(previous.score)
                         Text(GymFormat.delta(change)).fontWeight(.semibold)
-                            .foregroundStyle(change >= 0 ? theme.posTextColor : theme.negTextColor)
+                            .foregroundStyle(theme.toneTextColor(GymFormat.tone(for: change)))
                     }
                 }
             } else if logged > 0 {
@@ -258,9 +280,10 @@ struct TodayExerciseCard: View {
                 if let previous {
                     let change = bodyweight ? todaySession.score - previous.score
                         : app.unit.fromKilograms(todaySession.score) - app.unit.fromKilograms(previous.score)
-                    Text("\(GymFormat.delta(change)) vs last · index \(String(format: "%.1f", todaySession.index))")
+                    let tone = GymFormat.tone(for: change)
+                    Text("\(tone == .neutral ? "same as last" : "\(GymFormat.delta(change)) vs last") · index \(String(format: "%.1f", todaySession.index))")
                         .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(change >= 0 ? theme.posTextColor : theme.negTextColor)
+                        .foregroundStyle(theme.toneTextColor(tone))
                 } else {
                     Text("index \(String(format: "%.1f", todaySession.index))")
                         .font(.system(size: 12.5, weight: .semibold))
@@ -357,7 +380,7 @@ struct TodayExerciseCard: View {
     /// After a set is checked: start the rest timer and, when nothing is running yet, the planned session.
     private func afterLogging() {
         TodayRestClock.shared.start(seconds: app.restSeconds(for: app.activeSession?.workoutId ?? exercise.workoutId))
-        if date == app.today, app.activeSession == nil {
+        if date == app.sessionDay, app.activeSession == nil {
             let plan = app.todayPlan
             if plan.status == .planned || plan.status == .swapped { app.startSession() }
         }
@@ -404,7 +427,7 @@ struct TodayExerciseCard: View {
             TodayNumberField(
                 value: isLogged ? weightText(logged[index].weight) : (drafts[key("w", nil, index)] ?? weightText(fallback.weight)),
                 placeholder: "BW", suffix: unitLabel, width: 96,
-                accessibilityLabel: "Set \(index + 1) weight in \(app.unit == .kg ? "kilograms" : "pounds")",
+                accessibilityLabel: "\(exercise.name), set \(index + 1) weight in \(app.unit == .kg ? "kilograms" : "pounds")",
                 isSuggestion: !isLogged && drafts[key("w", nil, index)] == nil, live: !isLogged
             ) { text in
                 if isLogged {
@@ -417,7 +440,7 @@ struct TodayExerciseCard: View {
             Text("×").foregroundStyle(theme.inkFaintColor).frame(width: 16)
             TodayNumberField(
                 value: isLogged ? String(logged[index].reps) : (drafts[key("r", nil, index)] ?? String(fallback.reps)),
-                width: 76, accessibilityLabel: "Set \(index + 1) reps",
+                width: 76, accessibilityLabel: "\(exercise.name), set \(index + 1) reps",
                 isSuggestion: !isLogged && drafts[key("r", nil, index)] == nil, live: !isLogged
             ) { text in
                 if isLogged {
@@ -434,7 +457,7 @@ struct TodayExerciseCard: View {
                 .font(ThubanFont.mono(13.5))
                 .foregroundStyle(theme.inkDimColor)
                 .frame(width: 96, alignment: .trailing)
-            TodayCheckButton(isDone: isLogged, label: isLogged ? "Mark set \(index + 1) not done" : "Mark set \(index + 1) done") {
+            TodayCheckButton(isDone: isLogged, label: isLogged ? "Mark \(exercise.name) set \(index + 1) not done" : "Mark \(exercise.name) set \(index + 1) done") {
                 toggleBilateral(index: index, logged: logged, fallback: fallback)
             }
         }
@@ -506,9 +529,10 @@ struct TodayExerciseCard: View {
         return HStack(spacing: 12) {
             setNumber(index)
             self.previousText(previousText)
+            let submit = { toggleUnilateral(index: index, left: left, right: right, previousLeft: previousLeft, previousRight: previousRight) }
             sideCell(.left, index: index, logged: left, previous: previousLeft)
-            sideCell(.right, index: index, logged: right, previous: previousRight)
-            TodayCheckButton(isDone: done, label: done ? "Mark set \(index + 1) not done" : "Mark set \(index + 1) done") {
+            sideCell(.right, index: index, logged: right, previous: previousRight, onSideSubmit: submit)
+            TodayCheckButton(isDone: done, label: done ? "Mark \(exercise.name) set \(index + 1) not done" : "Mark \(exercise.name) set \(index + 1) done") {
                 toggleUnilateral(index: index, left: left, right: right, previousLeft: previousLeft, previousRight: previousRight)
             }
         }
@@ -518,7 +542,7 @@ struct TodayExerciseCard: View {
         .contextMenu { rowMenu(index: index, isLogged: done, loggedCount: max(left.count, right.count), sides: [.left, .right]) }
     }
 
-    private func sideCell(_ side: Side, index: Int, logged: [SetEntry], previous: [SetEntry]) -> some View {
+    private func sideCell(_ side: Side, index: Int, logged: [SetEntry], previous: [SetEntry], onSideSubmit: (() -> Void)? = nil) -> some View {
         let isLogged = logged.indices.contains(index)
         let fallback = isLogged ? logged[index] : suggestion(side: side, index: index, logged: logged, previous: previous)
         return HStack(spacing: 6) {
@@ -529,7 +553,7 @@ struct TodayExerciseCard: View {
             TodayNumberField(
                 value: isLogged ? weightText(logged[index].weight) : (drafts[key("w", side, index)] ?? weightText(fallback.weight)),
                 placeholder: "BW", suffix: unitLabel, width: 72,
-                accessibilityLabel: "Set \(index + 1) \(side.label.lowercased()) weight",
+                accessibilityLabel: "\(exercise.name), set \(index + 1) \(side.label.lowercased()) weight",
                 isSuggestion: !isLogged && drafts[key("w", side, index)] == nil, live: !isLogged
             ) { text in
                 if isLogged {
@@ -542,7 +566,7 @@ struct TodayExerciseCard: View {
             Text("×").foregroundStyle(theme.inkFaintColor)
             TodayNumberField(
                 value: isLogged ? String(logged[index].reps) : (drafts[key("r", side, index)] ?? String(fallback.reps)),
-                width: 50, accessibilityLabel: "Set \(index + 1) \(side.label.lowercased()) reps",
+                width: 50, accessibilityLabel: "\(exercise.name), set \(index + 1) \(side.label.lowercased()) reps",
                 isSuggestion: !isLogged && drafts[key("r", side, index)] == nil, live: !isLogged
             ) { text in
                 if isLogged {
@@ -552,6 +576,9 @@ struct TodayExerciseCard: View {
                 } else {
                     drafts[key("r", side, index)] = text
                 }
+            } onSubmit: {
+                // Return in the right reps field (the last in the row) checks the pair off ("8⏎").
+                if !isLogged { onSideSubmit?() }
             }
         }
         .frame(width: 190, alignment: .leading)

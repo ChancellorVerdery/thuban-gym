@@ -170,7 +170,9 @@ struct PlanDayCell: View {
     private var background: Color {
         if day.isToday { return theme.accentTintColor }
         switch day.status {
-        case .rest, .restDone, .empty: return theme.bgColor
+        // Rest days are recessed in both modes (bg is nearly the panel colour in dark mode, so it would not show).
+        case .rest, .restDone: return theme.panel2Color
+        case .empty: return theme.bgColor
         default: return theme.panelColor
         }
     }

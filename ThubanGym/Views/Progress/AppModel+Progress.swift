@@ -47,6 +47,15 @@ extension AppModel {
     /// Strength score minus the 100 baseline, as a percentage ("Stronger by 17.3%").
     var strengthGainPercent: Double? { strengthScore().map { $0 - 100 } }
 
+    /// The gain over the Progress range, so the headline agrees with the range in its eyebrow: today's score against
+    /// the score on the range's first day (All, or a range reaching back past the first session: against 100).
+    func strengthGainPercent(_ range: ProgressRange) -> Double? {
+        guard let now = strengthScore() else { return nil }
+        guard let start = range.start(today: today), let first = firstActivity, start > first,
+              let base = strengthScore(on: start), base > 0 else { return now - 100 }
+        return (now / base - 1) * 100
+    }
+
     /// Sessions (training completions) in the range.
     func progressSessionCount(_ range: ProgressRange) -> Int { sessionCount(since: progressStart(range)) }
 

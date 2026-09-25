@@ -49,8 +49,8 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .units: return .today
         case .appearance: return .settings
         case .plan: return .plan
-        case .data: return .file
-        case .about: return .history
+        case .data: return .archive
+        case .about: return .info
         }
     }
 }

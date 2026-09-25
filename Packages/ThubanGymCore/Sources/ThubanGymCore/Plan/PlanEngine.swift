@@ -161,22 +161,27 @@ public enum PlanEngine {
                 planWorkout = data.workout(data.plan.weeklyWorkoutId(date.weekday))
             }
 
-            if isToday, let done = completions.last {
-                // Done today: the pointer already moved past it, so today consumes nothing.
-                entry.workout = data.workout(done.workoutId)
-                entry.status = (entry.workout?.isRest ?? false) ? .restDone : .done
-                entry.source = .completion
-                entry.plannedWorkout = override == nil ? nil : planWorkout
-            } else if isToday, let session = data.activeSession, session.date == today {
+            if isToday, let session = data.activeSession, session.date == today {
+                // A running session wins over anything finished earlier today ("Train anyway" after a rest day,
+                // a second session): it is what is being done and logged against right now.
                 entry.workout = data.workout(session.workoutId)
                 entry.status = .inProgress
                 entry.source = .session
-                if override == nil {
+                if !completions.isEmpty {
+                    // Something was already done today, so the pointer has moved past today's slot.
+                    entry.plannedWorkout = override == nil ? nil : planWorkout
+                } else if override == nil {
                     entry.cycleIndex = planIndex
                     if isCycle { offset += 1 }
                 } else {
                     entry.plannedWorkout = planWorkout
                 }
+            } else if isToday, let done = completions.last {
+                // Done today: the pointer already moved past it, so today consumes nothing.
+                entry.workout = data.workout(done.workoutId)
+                entry.status = (entry.workout?.isRest ?? false) ? .restDone : .done
+                entry.source = .completion
+                entry.plannedWorkout = override == nil ? nil : planWorkout
             } else if let override {
                 entry.plannedWorkout = planWorkout
                 entry.source = .override

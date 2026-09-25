@@ -149,7 +149,8 @@ public enum GymFormat {
 
     /// "58 min", "1 h 5 min".
     public static func minutes(_ minutes: Int) -> String {
-        minutes < 60 ? "\(minutes) min" : (minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min")
+        // Minutes everywhere a session can plausibly last ("64 min", "avg 62 min"); hours only past 3 h.
+        minutes < 180 ? "\(minutes) min" : (minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes / 60) h \(minutes % 60) min")
     }
 
     /// Elapsed / countdown clock: 1872 s → "31:12"; ≥ 1 h → "1:02:03".
@@ -159,9 +160,21 @@ public enum GymFormat {
     }
 
     /// Signed delta with one decimal: "+6.3", "−1.2" (true minus sign), "0.0".
+    /// How to colour a change, with the same rounding as `delta`: positive only for a real gain, neutral when it
+    /// rounds to zero ("0.0 vs last" is not a gain).
+    public static func tone(for value: Double, decimals: Int = 1) -> DeltaTone {
+        let scaled = (value * pow(10, Double(decimals))).rounded()
+        return scaled > 0 ? .pos : (scaled < 0 ? .neg : .neutral)
+    }
+
     public static func delta(_ value: Double, decimals: Int = 1) -> String {
         let text = String(format: "%.\(decimals)f", abs(value))
         if (value * pow(10, Double(decimals))).rounded() == 0 { return text }
         return value > 0 ? "+\(text)" : "−\(text)"
     }
+}
+
+/// The colour class of a change: gain, loss, or no change.
+public enum DeltaTone: Sendable, Equatable {
+    case pos, neg, neutral
 }

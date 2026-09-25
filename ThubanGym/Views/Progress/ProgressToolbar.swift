@@ -7,6 +7,8 @@ struct ProgressToolbar: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
+        // Nothing to filter or convert before the first session.
+        let isEmpty = app.strengthScore() == nil && app.progressRecentRows(limit: 1).isEmpty
         HStack(spacing: 6) {
             SegmentedPicker(
                 selection: Binding(get: { app.progressRange }, set: { app.progressRange = $0 }),
@@ -14,6 +16,8 @@ struct ProgressToolbar: View {
                 segmentHeight: SegmentedPickerHeight.toolbar + 2
             )
             .accessibilityLabel("Range")
+            .disabled(isEmpty)
+            .opacity(isEmpty ? 0.5 : 1)
             Button {
                 app.setUnit(app.unit == .kg ? .lbs : .kg)
             } label: {
@@ -23,6 +27,7 @@ struct ProgressToolbar: View {
                 }
             }
             .buttonStyle(GhostButtonStyle(height: 32, horizontalPadding: 14))
+            .disabled(isEmpty)
             .accessibilityLabel("Units: \(app.unit.label). Switch to \(app.unit == .kg ? "lb" : "kg")")
             .help("Show weights in \(app.unit == .kg ? "pounds" : "kilograms"). Stored weights never change.")
         }

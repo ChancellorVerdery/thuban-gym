@@ -51,7 +51,7 @@ struct PlanView: View {
                 PlanControlCaption("Plan type")
                 SegmentedPicker(
                     selection: Binding(get: { app.plan.type }, set: { app.setPlanType($0) }),
-                    options: [SegmentOption(PlanType.weekly, "Weekly"), SegmentOption(PlanType.cycle, "Cycle", icon: .plan)],
+                    options: [SegmentOption(PlanType.weekly, "Weekly", icon: .calendar), SegmentOption(PlanType.cycle, "Cycle", icon: .plan)],
                     segmentHeight: 28
                 )
                 .accessibilityLabel("Plan type")
