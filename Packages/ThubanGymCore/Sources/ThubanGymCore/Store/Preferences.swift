@@ -42,10 +42,12 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var restAlert: Bool = true
     /// iPhone: the screen stays awake while a session is on screen.
     public var keepScreenAwake: Bool = true
+    /// iCloud Sync (per device). On by default; it only runs when iCloud is available to the build.
+    public var iCloudSync: Bool = true
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case theme, textSize, reduceMotion, atlasHost, atlasEmail, lastSection, restAutoStart, restAlert, keepScreenAwake }
+    enum CodingKeys: String, CodingKey { case theme, textSize, reduceMotion, atlasHost, atlasEmail, lastSection, restAutoStart, restAlert, keepScreenAwake, iCloudSync }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -58,6 +60,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         restAutoStart = try c.decodeIfPresent(Bool.self, forKey: .restAutoStart) ?? true
         restAlert = try c.decodeIfPresent(Bool.self, forKey: .restAlert) ?? true
         keepScreenAwake = try c.decodeIfPresent(Bool.self, forKey: .keepScreenAwake) ?? true
+        iCloudSync = try c.decodeIfPresent(Bool.self, forKey: .iCloudSync) ?? true
     }
 
     public static func load() -> Preferences {

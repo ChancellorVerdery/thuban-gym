@@ -3,7 +3,8 @@ import Foundation
 /// The whole local database: one Codable document (`gym.json`). Value type — the app holds one copy in `AppModel`,
 /// mutates it through the `mutating` API in `GymData+Mutations.swift`, and `GymStore` writes it atomically.
 public struct GymData: Codable, Hashable, Sendable {
-    public static let currentVersion = 1
+    /// 1: the original format. 2: sync fields (record `updatedAt`, set ids, list `order`, `sync` tombstones).
+    public static let currentVersion = 2
 
     public var version: Int
     public var workouts: [Workout]
@@ -20,6 +21,8 @@ public struct GymData: Codable, Hashable, Sendable {
     /// Provenance of the last Atlas import.
     public var importedAt: Date?
     public var importSource: String?
+    /// Sync bookkeeping: stamps of the single-value parts and the tombstones of deleted records (see `GymMerge`).
+    public var sync: SyncMeta
 
     public init(workouts: [Workout] = [], exercises: [Exercise] = [], logs: [LogEntry] = [], completions: [Completion] = [],
                 plan: Plan = Plan(), overrides: [PlanOverride] = [], extras: [PlanExtra] = [], settings: GymSettings = GymSettings(),
@@ -37,6 +40,7 @@ public struct GymData: Codable, Hashable, Sendable {
         self.lastRollover = lastRollover
         self.importedAt = importedAt
         self.importSource = importSource
+        self.sync = SyncMeta()
     }
 
     public static let empty = GymData()
@@ -44,12 +48,13 @@ public struct GymData: Codable, Hashable, Sendable {
     public var isEmpty: Bool { workouts.isEmpty && exercises.isEmpty && logs.isEmpty && completions.isEmpty }
 
     enum CodingKeys: String, CodingKey {
-        case version, workouts, exercises, logs, completions, plan, overrides, extras, settings, activeSession, lastRollover, importedAt, importSource
+        case version, workouts, exercises, logs, completions, plan, overrides, extras, settings, activeSession, lastRollover, importedAt, importSource, sync
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? GymData.currentVersion
+        // A file without a version predates versioning: treat it as format 1.
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         workouts = try c.decodeIfPresent([Workout].self, forKey: .workouts) ?? []
         exercises = try c.decodeIfPresent([Exercise].self, forKey: .exercises) ?? []
         logs = try c.decodeIfPresent([LogEntry].self, forKey: .logs) ?? []
@@ -62,6 +67,10 @@ public struct GymData: Codable, Hashable, Sendable {
         lastRollover = try c.decodeIfPresent(DayKey.self, forKey: .lastRollover)
         importedAt = try c.decodeIfPresent(Date.self, forKey: .importedAt)
         importSource = try c.decodeIfPresent(String.self, forKey: .importSource)
+        sync = try c.decodeIfPresent(SyncMeta.self, forKey: .sync) ?? SyncMeta()
+        // Format 1 → 2: give every set an id and every list item an order key, deterministically (from the log id
+        // and array positions), so two devices migrating copies of the same old file agree on every id.
+        if version < 2 { assignLegacyIdentity() }
     }
 
     // MARK: - Lookups

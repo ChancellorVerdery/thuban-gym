@@ -37,6 +37,16 @@ public final class GymStore: @unchecked Sendable {
 
     public var exists: Bool { fileManager.fileExists(atPath: fileURL.path) }
 
+    /// `load()`, and when the file on disk is an older format (1, before sync), a "before sync migration" snapshot
+    /// of it first. `migrated` tells the caller to save the upgraded document (so the snapshot is taken once).
+    /// The decoder itself upgrades the value (`GymData.assignLegacyIdentity`); old files always load.
+    public func loadMigrating() throws -> (data: GymData, migrated: Bool) {
+        let data = try load()
+        guard exists, data.version < GymData.currentVersion else { return (data, false) }
+        try snapshot(label: "before sync migration")
+        return (data, true)
+    }
+
     /// Writes atomically. Before the first write of a calendar day, the previous file is copied to a daily backup.
     public func save(_ data: GymData, today: DayKey = .today()) throws {
         try ensureDirectories()

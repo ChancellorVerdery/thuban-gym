@@ -31,7 +31,13 @@ extension GymData {
     public mutating func updateSet(exerciseId: String, date: DayKey, side: Side? = nil, index: Int, weightKg: Double?, reps: Int) throws {
         guard let row = logs.firstIndex(where: { $0.exerciseId == exerciseId && $0.date == date && $0.side == side }),
               logs[row].sets.indices.contains(index) else { throw ThubanError.invalid("No set \(index + 1) to update.") }
-        logs[row].sets[index] = SetEntry(weight: weightKg, reps: reps)
+        // Keep the set's sync identity: an edit is a change of this set, not a delete + a new set.
+        var entry = SetEntry(weight: weightKg, reps: reps)
+        let old = logs[row].sets[index]
+        entry.id = old.id
+        entry.loggedAt = old.loggedAt
+        entry.updatedAt = old.updatedAt
+        logs[row].sets[index] = entry
     }
 
     /// Removes set `index`; the row goes when its last set does. No-op for a missing set.
@@ -125,7 +131,8 @@ extension GymData {
     /// Undoes `finishSession` (the design's "Resume session"): removes that completion, restores the pointer and
     /// the running session. The only exception to completions being append-only.
     public mutating func undoFinish(_ receipt: FinishReceipt) {
-        if let index = completions.lastIndex(of: receipt.completion) { completions.remove(at: index) }
+        // By id: the stored copy may carry a sync stamp the receipt does not.
+        if let index = completions.lastIndex(where: { $0.id == receipt.completion.id }) { completions.remove(at: index) }
         plan.position = receipt.previousPosition
         activeSession = receipt.session
     }

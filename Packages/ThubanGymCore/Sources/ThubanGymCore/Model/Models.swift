@@ -29,6 +29,10 @@ public struct Workout: Codable, Hashable, Identifiable, Sendable {
     public var flex: Bool
     /// Rest timer between sets, seconds. nil → `GymSettings.restSeconds`.
     public var restSeconds: Int?
+    /// Sync: sort key that keeps the list order stable when two devices merge (see `GymMerge`). nil until stamped.
+    public var order: Double?
+    /// Sync: when this record last changed (last writer wins). nil = legacy / never stamped.
+    public var updatedAt: Date?
 
     public init(id: String = GymID.make("gw"), name: String, rest: Bool = false, flex: Bool = false, restSeconds: Int? = nil) {
         self.id = id
@@ -48,7 +52,7 @@ public struct Workout: Codable, Hashable, Identifiable, Sendable {
 
     public var isRest: Bool { rest }
 
-    enum CodingKeys: String, CodingKey { case id, name, rest, flex, restSeconds }
+    enum CodingKeys: String, CodingKey { case id, name, rest, flex, restSeconds, order, updatedAt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -57,6 +61,8 @@ public struct Workout: Codable, Hashable, Identifiable, Sendable {
         rest = try c.decodeIfPresent(Bool.self, forKey: .rest) ?? false
         flex = try c.decodeIfPresent(Bool.self, forKey: .flex) ?? false
         restSeconds = try c.decodeIfPresent(Int.self, forKey: .restSeconds)
+        order = try c.decodeIfPresent(Double.self, forKey: .order)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 }
 
@@ -72,6 +78,10 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
     public var bodyweight: Bool
     /// Free text like "3×8" or "4 × 6–8" (parse with `TargetSpec`).
     public var target: String
+    /// Sync: sort key (see `Workout.order`).
+    public var order: Double?
+    /// Sync: last change (see `Workout.updatedAt`).
+    public var updatedAt: Date?
 
     public init(id: String = GymID.make("ge"), workoutId: String, name: String, unilateral: Bool = false, bodyweight: Bool = false, target: String = "") {
         self.id = id
@@ -84,7 +94,7 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
 
     public var targetSpec: TargetSpec? { TargetSpec(target) }
 
-    enum CodingKeys: String, CodingKey { case id, workoutId, name, unilateral, bodyweight, target }
+    enum CodingKeys: String, CodingKey { case id, workoutId, name, unilateral, bodyweight, target, order, updatedAt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -94,6 +104,8 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
         unilateral = try c.decodeIfPresent(Bool.self, forKey: .unilateral) ?? false
         bodyweight = try c.decodeIfPresent(Bool.self, forKey: .bodyweight) ?? false
         target = try c.decodeIfPresent(String.self, forKey: .target) ?? ""
+        order = try c.decodeIfPresent(Double.self, forKey: .order)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 }
 
@@ -110,6 +122,13 @@ public enum Side: String, Codable, CaseIterable, Sendable, Identifiable {
 public struct SetEntry: Codable, Hashable, Sendable {
     public var weight: Double?
     public var reps: Int
+    /// Sync: stable id (`gs-…`, or `<log id>~NNN` for sets written before sync existed). nil until the app stamps
+    /// the document (`GymData.stamped(from:)`), so pure mutations and tests stay value-comparable.
+    public var id: String?
+    /// Sync: when the set was logged (orders the sets of a row after a merge).
+    public var loggedAt: Date?
+    /// Sync: last change (an edit of weight / reps).
+    public var updatedAt: Date?
 
     public init(weight: Double?, reps: Int) {
         self.weight = weight.flatMap { $0 > 0 ? $0 : nil }
@@ -150,6 +169,8 @@ public struct Completion: Codable, Hashable, Sendable, Identifiable {
     public var end: String
     /// True for a rest slot the app completed by itself when its day passed.
     public var auto: Bool
+    /// Sync: when this record was written (beats an older deletion of the same id, e.g. a restored backup).
+    public var updatedAt: Date?
 
     public init(workoutId: String, date: DayKey, ts: Double, start: String = "", end: String = "", auto: Bool = false) {
         self.workoutId = workoutId
@@ -165,7 +186,7 @@ public struct Completion: Codable, Hashable, Sendable, Identifiable {
     /// Minutes between start and end (wraps midnight), nil when unknown.
     public var durationMinutes: Int? { ClockTime.duration(start: start, end: end) }
 
-    enum CodingKeys: String, CodingKey { case workoutId, date, ts, start, end, auto }
+    enum CodingKeys: String, CodingKey { case workoutId, date, ts, start, end, auto, updatedAt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -175,6 +196,7 @@ public struct Completion: Codable, Hashable, Sendable, Identifiable {
         start = try c.decodeIfPresent(String.self, forKey: .start) ?? ""
         end = try c.decodeIfPresent(String.self, forKey: .end) ?? ""
         auto = try c.decodeIfPresent(Bool.self, forKey: .auto) ?? false
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 }
 
@@ -297,6 +319,8 @@ public struct PlanOverride: Codable, Hashable, Sendable, Identifiable {
     public var workoutId: String?
     /// Optional reason shown on the Plan screen ("Career fair, 10–3").
     public var note: String?
+    /// Sync: last change (an override re-made after a deletion wins when it is newer).
+    public var updatedAt: Date?
 
     public init(date: DayKey, workoutId: String?, note: String? = nil) {
         self.date = date
@@ -312,6 +336,8 @@ public struct PlanOverride: Codable, Hashable, Sendable, Identifiable {
 public struct PlanExtra: Codable, Hashable, Sendable, Identifiable {
     public var date: DayKey
     public var exerciseId: String
+    /// Sync: when it was added (also orders a day's extras after a merge).
+    public var updatedAt: Date?
 
     public init(date: DayKey, exerciseId: String) {
         self.date = date
