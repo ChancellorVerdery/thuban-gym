@@ -20,9 +20,11 @@ fi
 rm -rf "$OUT"; mkdir -p "$OUT"
 echo "Output: $OUT"
 
-# run_smoke <device name> <device type> <mode> <timeout s>
+# run_smoke <device name> <device type> <mode> <stall timeout s>
+# The timeout restarts on every screenshot, so a slow (busy) machine only fails
+# when the app makes no progress at all for that long. SMOKE_TIMEOUT overrides it.
 run_smoke() {
-  local name="$1" type="$2" mode="$3" limit="$4" udid data shots start
+  local name="$1" type="$2" mode="$3" limit="${SMOKE_TIMEOUT:-$4}" udid data shots start
   udid="$(sim_udid "$name" "$type")" || return 1
   echo "== $name ($udid), mode $mode"
   sim_boot "$udid"
@@ -46,13 +48,14 @@ run_smoke() {
         echo "  $shot.png"
         : > "$shots/$shot.done"
         taken=$((taken + 1))
+        start=$SECONDS
       done
       [[ -e "$shots/finished" ]] && break
     fi
     sleep 0.3
   done
   if [[ ! -e "$shots/finished" ]]; then
-    echo "TIMEOUT: $name did not finish in $limit s ($taken screenshots)"
+    echo "TIMEOUT: $name made no progress for $limit s ($taken screenshots)"
     xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1
     return 2
   fi
