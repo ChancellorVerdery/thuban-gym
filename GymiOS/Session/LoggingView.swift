@@ -3,8 +3,8 @@ import ThubanGymCore
 
 /// Logging a set (boards Logging + LoggingDark): the exercise, last time, the set table, weight and reps cards with
 /// ± steppers, the live e1RM against last time, and "Log set 3 · start rest". Tapping a number opens the NATIVE
-/// number pad (decimal pad for weight, number pad for reps) with a Done bar; the quick ±2.5 / ±5 / Same chips sit
-/// above the keyboard in the page while the weight is being typed.
+/// number pad (decimal pad for weight, number pad for reps) with a keyboard toolbar (Reps / Weight · Done); the
+/// quick ±2.5 / ±5 / Same chips sit in the page above the keyboard while the weight is being typed.
 struct LoggingView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.thubanTheme) private var theme
@@ -14,7 +14,7 @@ struct LoggingView: View {
 
     @State private var weightText = ""
     @State private var repsText = ""
-    @FocusState private var focus: LogField?
+    @State private var focus: LogField?
     @State private var historyId: String?
 
     enum LogField: Hashable { case weight, reps }
@@ -64,15 +64,6 @@ struct LoggingView: View {
             guard let field else { return }
             focus = field == "reps" ? .reps : (field == "weight" ? .weight : nil)
             app.smokeFocus = nil
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                if focus == .weight {
-                    Button("Reps") { focus = .reps }
-                }
-                Spacer()
-                Button("Done") { focus = nil }.fontWeight(.semibold)
-            }
         }
         .sheet(item: Binding(get: { historyId.map(IdentifiedString.init) }, set: { historyId = $0?.id })) { value in
             NavigationStack {
@@ -270,16 +261,23 @@ struct LoggingView: View {
         return VStack(alignment: compact ? .leading : .center, spacing: compact ? 2 : 8) {
             Eyebrow(label, color: focused ? theme.brassInkColor : theme.inkDimColor)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                TextField(field == .weight && exercise.bodyweight ? "BW" : "0", text: text)
-                    .keyboardType(keyboard)
-                    .focused($focus, equals: field)
-                    .font(PhoneFont.serif(compact ? 40 : 52, relativeTo: .largeTitle))
-                    .foregroundStyle(theme.inkColor)
-                    .tint(theme.accentColor)
-                    .multilineTextAlignment(compact ? .leading : .center)
-                    .fixedSize()
-                    .accessibilityLabel(label)
-                    .accessibilityValue(text.wrappedValue.isEmpty ? (field == .weight && exercise.bodyweight ? "Bodyweight" : "0") : "\(text.wrappedValue) \(unitLabel)")
+                NumberField(
+                    text: text,
+                    placeholder: field == .weight && exercise.bodyweight ? "BW" : "0",
+                    keyboard: keyboard,
+                    font: PhoneFont.uiSerif(compact ? 40 : 52, relativeTo: .largeTitle),
+                    color: UIColor(theme.inkColor),
+                    placeholderColor: UIColor(theme.inkFaintColor),
+                    tint: UIColor(theme.accentColor),
+                    alignment: compact ? .left : .center,
+                    isFocused: focused,
+                    accessibilityLabel: field == .weight ? "Weight in \(unit.label)" : "Reps",
+                    onFocus: { isOn in
+                        if isOn { focus = field } else if focus == field { focus = nil }
+                    },
+                    leading: [NumberField.Action(title: field == .weight ? "Reps" : "Weight") { focus = field == .weight ? .reps : .weight }],
+                    trailing: NumberField.Action(title: "Done", bold: true) { focus = nil })
+                .fixedSize()
                 if !unitLabel.isEmpty {
                     Text(unitLabel).font(.subheadline.weight(.medium)).foregroundStyle(theme.inkDimColor)
                 }

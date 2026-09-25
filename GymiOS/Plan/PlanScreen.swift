@@ -13,11 +13,17 @@ struct PlanScreen: View {
         let days = app.planDays(from: app.today, count: 7)
         List {
             Section {
+                PageTitle("Plan")
+                    .padding(.bottom, 14)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 PhoneSegmented(options: [(PlanType.weekly, "Weekly"), (PlanType.cycle, "Cycle")],
                                selection: Binding(get: { app.plan.type }, set: { app.setPlanType($0) }),
                                accessibilityLabel: "Plan type")
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
 
             if app.isCycle {
@@ -76,7 +82,8 @@ struct PlanScreen: View {
         }
         .phoneList(theme)
         .phoneScreen(theme)
-        .navigationTitle("Plan")
+        .pageNavigationTitle("Plan")
+        .contentMargins(.top, 0, for: .scrollContent)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 IconButton(.plus, label: "Change a day") { changing = PlanDayChange(date: app.today.adding(days: 1), mode: .swap) }

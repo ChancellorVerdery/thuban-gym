@@ -12,7 +12,7 @@ struct SettingsSheet: View {
 
     var body: some View {
         if embedded {
-            SettingsContent().phoneScreen(theme).navigationTitle("Settings")
+            SettingsContent(showsTitle: true).phoneScreen(theme).pageNavigationTitle("Settings")
         } else {
             NavigationStack {
                 SettingsContent()
@@ -31,10 +31,11 @@ struct SettingsSheet: View {
 struct SettingsContent: View {
     @Environment(AppModel.self) private var app
     @Environment(\.thubanTheme) private var theme
+    /// iPad sidebar: the page draws its own serif title.
+    var showsTitle = false
 
     @State private var importing = false
     @State private var exporting = false
-    @State private var pending: AppModel.PendingImport?
     @State private var message: String?
     @State private var errorText: String?
 
@@ -42,6 +43,7 @@ struct SettingsContent: View {
         @Bindable var app = app
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if showsTitle { PageTitle("Settings").padding(.bottom, 16) }
                 SectionHeading("Appearance")
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
@@ -125,29 +127,10 @@ struct SettingsContent: View {
             .padding(.top, 12)
             .padding(.bottom, 32)
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .data]) { result in
-            switch result {
-            case .success(let url):
-                do { pending = try app.readImport(url) } catch { errorText = error.localizedDescription }
-            case .failure(let error):
-                errorText = error.localizedDescription
-            }
-        }
         .fileExporter(isPresented: $exporting, document: app.exportDocument, contentType: .json, defaultFilename: "gym") { result in
             if case .failure(let error) = result { errorText = error.localizedDescription } else { message = "Exported gym.json." }
         }
-        .confirmationDialog(pending.map { "Replace this phone's log with \($0.fileName)?" } ?? "", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
-                            titleVisibility: .visible, presenting: pending) { pending in
-            Button("Replace with \(pending.fileName)", role: .destructive) {
-                do {
-                    try app.applyImport(pending)
-                    message = "Imported \(PhoneFormat.count(pending.contents.workouts, "workout")) and \(PhoneFormat.count(pending.contents.sets, "set")). The previous log was saved as a snapshot."
-                } catch { errorText = error.localizedDescription }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { pending in
-            Text(describe(pending.contents) + ". A snapshot of the phone's current log is kept first.")
-        }
+        .gymImport(isPresented: $importing) { text in message = text }
         .alert("Could not use that file", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -218,15 +201,52 @@ struct SettingsContent: View {
     private var dataFootnote: String {
         let local = app.localContents
         return "The phone keeps its own gym.json, the same format as the Mac. To bring the Mac's log over, export it there (Settings ▸ Data & storage ▸ Export), AirDrop it or save it to Files, then import it here. On this phone: "
-            + describe(local) + "."
+            + PhoneFormat.contents(local) + "."
     }
 
-    private func describe(_ contents: GymTransfer.Contents) -> String {
-        var text = "\(PhoneFormat.count(contents.workouts, "workout")), \(PhoneFormat.count(contents.sets, "set")) in \(PhoneFormat.count(contents.sessions, "session"))"
-        if let first = contents.firstDay, let last = contents.lastDay {
-            text += ", \(GymFormat.monthDay(first)) – \(GymFormat.monthDay(last))"
-        }
-        if contents.format == "atlas" { text += " (an Atlas export)" }
-        return text
+}
+
+/// "Import gym.json…": pick a file, show what it holds, confirm, snapshot the phone's log, replace it.
+struct GymImportModifier: ViewModifier {
+    @Environment(AppModel.self) private var app
+    @Binding var isPresented: Bool
+    var onDone: (String) -> Void
+    @State private var pending: AppModel.PendingImport?
+    @State private var errorText: String?
+
+    func body(content: Content) -> some View {
+        content
+            .fileImporter(isPresented: $isPresented, allowedContentTypes: [.json, .data]) { result in
+                switch result {
+                case .success(let url):
+                    do { pending = try app.readImport(url) } catch { errorText = error.localizedDescription }
+                case .failure(let error):
+                    errorText = error.localizedDescription
+                }
+            }
+            .confirmationDialog(pending.map { app.isFirstRun ? "Import \($0.fileName)?" : "Replace this phone's log with \($0.fileName)?" } ?? "",
+                                isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+                                titleVisibility: .visible, presenting: pending) { pending in
+                Button(app.isFirstRun ? "Import" : "Replace with \(pending.fileName)", role: app.isFirstRun ? nil : .destructive) {
+                    do {
+                        try app.applyImport(pending)
+                        onDone("Imported \(PhoneFormat.count(pending.contents.workouts, "workout")) and \(PhoneFormat.count(pending.contents.sets, "set")). The previous log was saved as a snapshot.")
+                    } catch { errorText = error.localizedDescription }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { pending in
+                Text(PhoneFormat.contents(pending.contents) + (app.isFirstRun ? "." : ". A snapshot of the phone's current log is kept first."))
+            }
+            .alert("Could not use that file", isPresented: Binding(get: { errorText != nil }, set: { if !$0 { errorText = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorText ?? "")
+            }
+    }
+}
+
+extension View {
+    func gymImport(isPresented: Binding<Bool>, onDone: @escaping (String) -> Void = { _ in }) -> some View {
+        modifier(GymImportModifier(isPresented: isPresented, onDone: onDone))
     }
 }

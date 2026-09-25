@@ -169,6 +169,8 @@ enum PhoneSmoke {
         await shot("83-ipad-progress")
         app.padSection = .workouts
         await shot("84-ipad-workouts")
+        app.padSection = .settings
+        await shot("86-ipad-settings")
         app.padSection = .today
         app.setAppearanceMode(.dark)
         await shot("85-ipad-session-dark", settle: 1.8)

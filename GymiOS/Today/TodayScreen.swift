@@ -398,6 +398,7 @@ struct RowPressStyle: ButtonStyle {
 struct TodayFirstRun: View {
     @Environment(AppModel.self) private var app
     @Environment(\.thubanTheme) private var theme
+    @State private var importing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -406,11 +407,12 @@ struct TodayFirstRun: View {
             Text("Bring your log over from the Mac: in Thuban Gym on the Mac choose Settings ▸ Data ▸ Export, AirDrop gym.json or save it to Files, then import it here.")
                 .font(.subheadline).foregroundStyle(theme.inkDimColor)
                 .fixedSize(horizontal: false, vertical: true)
-            Button { app.showSettings = true } label: {
+            Button { importing = true } label: {
                 HStack(spacing: 10) { Icon(.download, size: 20); Text("Import gym.json…") }
             }
             .buttonStyle(PhonePrimaryStyle())
             .padding(.top, 8)
+            .gymImport(isPresented: $importing)
             Button("Or start fresh: add a workout") { app.tab = .workouts }
                 .buttonStyle(PhoneTextStyle())
                 .frame(maxWidth: .infinity)

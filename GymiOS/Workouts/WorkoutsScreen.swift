@@ -14,6 +14,7 @@ struct WorkoutsScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                PageTitle("Workouts").padding(.bottom, 12)
                 searchField
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     lists
@@ -26,7 +27,7 @@ struct WorkoutsScreen: View {
         }
         .scrollDismissesKeyboard(.immediately)
         .phoneScreen(theme)
-        .navigationTitle("Workouts")
+        .pageNavigationTitle("Workouts")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 IconButton(.plus, label: "New workout") { newName = ""; adding = true }

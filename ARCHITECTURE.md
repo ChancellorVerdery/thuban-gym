@@ -1,6 +1,7 @@
 # Thuban Gym — architecture contract
 
-Native macOS app (SwiftUI, macOS 15+, Xcode 26, Swift 5 language mode, XcodeGen, ad-hoc signing, no Keychain).
+Native macOS app (SwiftUI, macOS 15+, Xcode 26, Swift 5 language mode, XcodeGen, ad-hoc signing, no Keychain),
+plus an iPhone / iPad app (target `GymiOS`, see "iOS app" at the end) built on the same core and shared sources.
 A local training log: the plan (weekly or a cycle), today's session with set logging, workouts and their
 exercises, progress (e1RM indexes and a strength score), and a one-time read-only import from the Atlas gym plugin.
 Sibling of Thuban Canvas / Study: same theme engine (Atlas colour schemes, Brass default, auto / light / dark),
@@ -32,6 +33,13 @@ three branches must merge without conflicts. If you need something more:
 
 ```
 project.yml                  XcodeGen; sources are directory globs. ThubanGym.xcodeproj is generated, NOT committed.
+                             Targets: ThubanGym (macOS) and GymiOS (iOS); both compile Shared/.
+Shared/                      Platform-neutral app sources compiled into BOTH targets:
+  Model/    AppModel+Queries, AppModel+Mutations, AppModel+Today, AppModel+Progress (extensions of each target's own
+            `AppModel`), SharedRoutes (ProgressRange, ThubanScheme)
+  Theme/    ThemeEnvironment (tokens → Color, fonts, modifiers; NSColor bits fenced to macOS), DeltaTone+Theme
+  Art/      AppArt + AppArtSource (the mark), Icon (line icons + Glyph)
+GymiOS/                      The iOS app (see "iOS app").
 Packages/ThubanGymCore/      SwiftPM library + tests (swift test)
   Model/    Models (Workout, Exercise, SetEntry, LogEntry, Completion, ActiveSession, GymSettings, Plan,
             PlanOverride, PlanExtra, GymID), DayKey (yyyy-MM-dd value type, Weekday, ClockTime), Units
@@ -43,7 +51,10 @@ Packages/ThubanGymCore/      SwiftPM library + tests (swift test)
   Store/    GymStore (gym.json, atomic writes, daily backups, snapshots), Preferences (preferences.json),
             AppPaths (THUBAN_GYM_HOME), JSONFile
   Import/   AtlasImporter (SQL, ssh command, fetch, convert, ImportSummary), AtlasDocument (tolerant rows),
-            CommandRunner / ProcessRunner (Process behind a protocol; tests use FixtureRunner)
+            CommandRunner / ProcessRunner (Process behind a protocol, macOS only; tests use FixtureRunner;
+            DefaultCommandRunner gives iOS an always-failing runner)
+  Session/  SessionLogic (set slots, suggestions, progress segments, next exercise, RestCountdown), WorkoutSummary
+  Store/    … GymTransfer (gym.json import / export between devices: decode with validation, encode, contents)
   Sample/   SampleData (deterministic realistic data for smoke / THUBAN_GYM_SEED=sample)
   Theme/    Copied from Thuban Canvas — ColorScheme, SchemePresets, ThemeSelection, ThemeResolver, ResolvedTheme …
 ThubanGym/
@@ -59,9 +70,8 @@ ThubanGym/
   Views/Progress    ProgressScreen, ProgressToolbar, ProgressSmokeScenes        (C)
   Views/Settings    SettingsView (nav), SettingsChrome, SettingsPaneHeader, ImportSettings, UnitsSettings,
                     AppearanceSettings (working), PlanSettings, DataSettings, AboutSettings, SettingsSmokeScenes (C)
-  Views/Components  Buttons, Chip, SegmentedPicker, ToggleChip, EmptyState, ProgressBar, Icon (+Glyph), Common,
-                    AppArt + AppArtSource (the app mark)
-  Views/Theme       ThemeEnvironment (tokens → Color, ThubanMetrics, ThubanFont, modifiers)
+  Views/Components  Buttons, Chip, SegmentedPicker, ToggleChip, EmptyState, ProgressBar, Common
+                    (Icon, AppArt and ThemeEnvironment moved to Shared/)
   Resources         Assets.xcassets (static AppIcon from scripts/make_app_icon.sh), entitlements
 scripts/   build.sh, test.sh, smoke.sh, install.sh, regen.sh, make_app_icon.sh
 ```
@@ -260,8 +270,62 @@ and compare them with the artboards before you finish.
 - `DERIVED=.build/DerivedData-<you> scripts/smoke.sh .build/smoke-<you>` — builds, runs the smoke walk on a temp
   home (never your real data, never ssh), writes PNGs. It only stops the process it launched.
 - `scripts/install.sh` — Release build → `/Applications/Thuban Gym.app` (lead only, after merging).
-- `scripts/make_app_icon.sh` — regenerates the static AppIcon from `AppArtSource.swift` (Brass on a dark plate).
+- `scripts/make_app_icon.sh` — regenerates the static AppIcon from `Shared/Art/AppArtSource.swift` (Brass on a dark plate).
 - Manual run on sample data: `THUBAN_GYM_HOME=/tmp/gym-demo THUBAN_GYM_SEED=sample "<app>/Contents/MacOS/Thuban Gym"`.
 
 Git: work on your own branch, small commits, messages ending with
 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Do not merge to main and do not install.
+
+## iOS app (target `GymiOS`)
+
+Thuban Gym for iPhone and iPad: the planner / logger used AT the gym. Spec: the approved iOS design canvas
+`~/.claude/jobs/bd9882f5/tmp/design/gym-ios/project/*.dc.html` (Main = Today, Plan, Workouts, Progress, Logging, Rest,
+Finished, Exercise, WorkoutEditor, LoggingDark, IPad, Settings) with ONE change from the user: typed numbers use the
+NATIVE iOS keypad (decimal pad for weight, number pad for reps, a keyboard toolbar with Reps/Weight · Done), not the
+board's custom pad. The quick −5 / −2.5 / +2.5 / +5 / Same chips stay, in the page above the keyboard.
+
+- Target: iOS 18+, iPhone + iPad, bundle `org.thuban.gym.ios`, product "Thuban Gym". `UIDesignRequiresCompatibility`
+  keeps the classic bars (panel tab bar with a hairline, as drawn). Simulator builds are unsigned
+  (`CODE_SIGNING_ALLOWED=NO`); device builds sign automatically with `DEVELOPMENT_TEAM`.
+- Sources: `GymiOS/` + `Shared/`. `GymiOS/App/AppModel.swift` is the iOS root model: the SAME core surface as the Mac
+  model (`data`, `today`, `mutate`, `lastFinish`, `focusedExerciseId`, `store`), so the shared query / mutation
+  extensions compile unchanged; plus tabs and stacks (`tab`, `todayPath` …, `padSection`), the session flow
+  (`sessionPresented`, `sessionStage` .logging / .resting / .finished(WorkoutSummary), `rest: RestCountdown`,
+  `lastLogged`, `editingSet`) and the theme (`systemIsDark` reported by the root view).
+- Layout: `App/` (GymPhoneApp + PhoneRoot + PhoneTabs, AppModel (+Session, +Transfer), RestAlerts, PhoneAppearance,
+  PhoneSmoke), `Components/` (PhoneStyle: metrics, fonts, Card, Eyebrow, chips, buttons, PhoneSegmented, PageTitle,
+  phoneChrome; PhoneFormat; NumberField), `Today/`, `Session/` (SessionCover + SessionHeader, LoggingView, RestView,
+  FinishedView), `Plan/`, `Workouts/`, `Progress/` (ProgressScreen + StrengthChart on Swift Charts,
+  ExerciseHistoryScreen), `Settings/` (SettingsSheet, GymImportModifier), `Pad/` (PadRoot: sidebar + detail; Today
+  with a session = exercise list | logger / rest side by side when the detail is ≥ 760 pt wide).
+- Theme: the 8 Atlas presets + Auto / Light / Dark from the same `ThemeResolver`, same token names. Presented content
+  (sheets, the session cover) gets `.phoneChrome()` (theme, brass tint, the chosen mode). UIKit bars are styled once
+  by `PhoneAppearance` with dynamic token colours and re-applied on a scheme change; page titles are drawn in the
+  content (`PageTitle`, serif 34) because the UIKit large-title font does not survive SwiftUI's bar management.
+  Fonts scale with Dynamic Type (`PhoneFont` uses `UIFontMetrics`; the root rebuilds on a size change).
+- Session rules (all in the core, tested): `SessionLogic.slots` (done / current / upcoming with "last" values),
+  `suggestion` (today's last set → progression target → last time → target reps), unilateral exercises log left
+  then right (rest only after the pair), `progress`, `nextExercise`; `RestCountdown` is wall-clock based.
+  Logging the first set starts today's session; "Log set · start rest" starts the rest when Settings says so.
+- Rest alerts: a local notification (sound, time-sensitive) scheduled for the end of the rest, rescheduled on ±15 s,
+  cancelled on skip / undo; a success haptic when the app is on screen. Permission is asked at the first rest. No
+  push, no widgets, no Live Activities. "Keep the screen awake" disables the idle timer while the session is up.
+- Data: the phone keeps its own gym.json (same `GymStore`, same format) in Application Support inside the app
+  container. Settings ▸ Data ▸ "Import gym.json…" (`fileImporter`; `GymTransfer.decode` validates it, an Atlas
+  export is converted too; a "before-import" snapshot is taken, then the document is replaced) and "Export
+  gym.json…" (`fileExporter`), so the Mac's log moves over by AirDrop / Files. No Keychain; the app holds no
+  credentials. The Atlas ssh import is Mac-only (`ProcessRunner` is fenced with `#if os(macOS)`); iOS never runs ssh.
+- Preferences (core `Preferences`, tolerant): `restAutoStart`, `restAlert`, `keepScreenAwake` (default on).
+
+### iOS scripts
+
+- `scripts/ios_build.sh` — simulator build into `.build/DerivedData-iOS` (`CONFIG=Release` for Release).
+- `scripts/ios_smoke.sh [out]` — boots its own simulators "Thuban Gym Smoke" (iPhone 17, iOS 26.5) and "Thuban Gym
+  Smoke iPad" (iPad Air 11-inch; `IPAD=0` skips it), launches with `SIMCTL_CHILD_THUBAN_GYM_SMOKE=phone|ipad`. The
+  app moves to a fresh temp home in its container, seeds SampleData and walks the screens; per screen it writes
+  `<name>.ready` into `tmp/smoke-shots/` and the script answers with `simctl io screenshot` → `.build/ios-smoke/
+  <name>.png` + `<name>.done`. Shots: 10–16 tabs / history / editor / settings, 20–22 logging, number pad, rest,
+  30–31 finished / done, 40 first run, 70–75 dark Brass, 80–86 iPad (portrait: simctl cannot rotate the device).
+- `scripts/ios_install.sh` — Release simulator build installed on "Thuban iPhone" (created when missing); a signed
+  device build + `devicectl` install only when a paired iPhone shows up AND `DEVELOPMENT_TEAM` is set.
+- `scripts/make_ios_icon.sh` — the 1024 single-size iOS AppIcon (Brass mark on the dark plate) from Shared/Art.

@@ -28,6 +28,7 @@ struct ProgressScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                PageTitle("Progress").padding(.bottom, 12)
                 PhoneSegmented(options: PhoneRange.allCases.map { ($0, $0.rawValue) }, selection: $range, accessibilityLabel: "Range")
                 if app.firstActivity == nil {
                     Text("Log a few sessions and your strength score shows up here: the average of every exercise's e1RM, as a percentage of where it started.")
@@ -42,7 +43,7 @@ struct ProgressScreen: View {
             .padding(.bottom, 24)
         }
         .phoneScreen(theme)
-        .navigationTitle("Progress")
+        .pageNavigationTitle("Progress")
     }
 
     // MARK: Strength score

@@ -49,6 +49,16 @@ enum PhoneFormat {
         return (n > 0 ? "+" : "−") + GymFormat.grouped(abs(n))
     }
 
+    /// "7 workouts, 1,240 sets in 169 sessions, Feb 4 – Sep 25".
+    static func contents(_ contents: GymTransfer.Contents) -> String {
+        var text = "\(count(contents.workouts, "workout")), \(count(contents.sets, "set")) in \(count(contents.sessions, "session"))"
+        if let first = contents.firstDay, let last = contents.lastDay {
+            text += ", \(GymFormat.monthDay(first)) – \(GymFormat.monthDay(last))"
+        }
+        if contents.format == "atlas" { text += " (an Atlas export)" }
+        return text
+    }
+
     /// A display-unit weight for a text field: "140", "62.5".
     static func fieldWeight(_ value: Double) -> String { GymFormat.number(value, decimals: 2).replacingOccurrences(of: ",", with: "") }
 }

@@ -29,6 +29,12 @@ enum PhoneFont {
     static func sans(_ size: CGFloat, relativeTo style: UIFont.TextStyle = .body, weight: Font.Weight = .regular) -> Font {
         .system(size: UIFontMetrics(forTextStyle: style).scaledValue(for: size), weight: weight)
     }
+    /// UIKit serif (for `NumberField`).
+    static func uiSerif(_ size: CGFloat, relativeTo style: UIFont.TextStyle = .title1, weight: UIFont.Weight = .semibold) -> UIFont {
+        let scaled = UIFontMetrics(forTextStyle: style).scaledValue(for: size)
+        let base = UIFont.systemFont(ofSize: scaled, weight: weight)
+        return base.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: scaled) } ?? base
+    }
     /// 12 pt semibold, set uppercase with tracking by `Eyebrow`.
     static var micro: Font { sans(12, relativeTo: .caption1, weight: .semibold) }
 }
@@ -313,6 +319,32 @@ struct PhoneChrome: ViewModifier {
 
 extension View {
     func phoneChrome() -> some View { modifier(PhoneChrome()) }
+}
+
+/// A tab's serif page title, drawn in the content under the toolbar row (board Plan / Workouts / Progress). The
+/// navigation bar keeps the title only for the back button of pushed screens.
+struct PageTitle: View {
+    @Environment(\.thubanTheme) private var theme
+    var text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text)
+            .font(PhoneFont.serif(34, relativeTo: .largeTitle))
+            .kerning(-0.3)
+            .foregroundStyle(theme.inkColor)
+            .accessibilityAddTraits(.isHeader)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension View {
+    /// Title for the back button and VoiceOver, with nothing drawn in the bar itself (the page draws `PageTitle`).
+    func pageNavigationTitle(_ title: String) -> some View {
+        self
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) } }
+    }
 }
 
 /// Chevron at the end of a tappable row.
