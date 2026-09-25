@@ -124,6 +124,27 @@ final class SyncMergeTests: XCTestCase {
         XCTAssertEqual(merged.workout("pull")?.name, "Pull (back)")
     }
 
+    func testSetsLoggedInTheSameSecondKeepTheirOrder() {
+        // Many sets stamped in one change share `loggedAt`; their order must not depend on random id suffixes.
+        let day = today.adding(days: -1)
+        var data = TestWorld.make()
+        for reps in 1...40 { data.logSet(exerciseId: "row", date: day, weightKg: 60, reps: reps) }
+        let stamped = data.stamped(from: .empty, now: t0)
+        XCTAssertEqual(sets(stamped, "row", day).map(\.reps), Array(1...40))
+        // Two more quick taps within the same second, each its own change.
+        var next = edit(stamped, at: 0) { $0.logSet(exerciseId: "row", date: day, weightKg: 60, reps: 41) }
+        next = edit(next, at: 0) { $0.logSet(exerciseId: "row", date: day, weightKg: 60, reps: 42) }
+        XCTAssertEqual(sets(next, "row", day).map(\.reps), Array(1...42))
+        XCTAssertEqual(sets(GymMerge.merge(stamped, next), "row", day).map(\.reps), Array(1...42))
+        XCTAssertEqual(sets(GymMerge.merge(next, stamped), "row", day).map(\.reps), Array(1...42))
+    }
+
+    func testIdsMadeInARowSortInTheOrderTheyWereMade() {
+        let ids = (0..<500).map { _ in GymID.make("gs") }
+        XCTAssertEqual(ids, ids.sorted())
+        XCTAssertEqual(Set(ids).count, ids.count)
+    }
+
     func testLaterEditWins() {
         let start = base()
         let early = edit(start, at: 10) { $0.updateWorkout("legs") { $0.name = "Legs early" } }

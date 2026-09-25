@@ -344,7 +344,9 @@ merged with it. Settings: Mac ▸ Data & storage ▸ iCloud Sync, iOS ▸ Settin
 (`Preferences.iCloudSync`, default on).
 
 **Data model (format 2).** Every record has a stable id and an `updatedAt` stamp (whole seconds, so it survives
-the file): workouts / exercises (id, plus an `order` key for list order), sets (`SetEntry.id` `gs-…`, `loggedAt`),
+the file): workouts / exercises (id, plus an `order` key for list order), sets (`SetEntry.id` `gs-…`, `loggedAt`; a row
+sorts by `(loggedAt, id)`, and `GymID` milliseconds are strictly increasing per process, so sets logged in the same
+second keep their order),
 completions (date|workout|ts), overrides (their date), extras (date|exercise). `sync` holds the stamps of the plan,
 the gym settings and the running session, and `deleted` = tombstones (`w:/e:/s:/c:/o:/x:` key → date). The pure
 mutations do not know any of this: `AppModel.commit` calls `data.stamped(from: old)`, which diffs old vs new —
@@ -374,6 +376,12 @@ unreadable or newer-format shared file is never overwritten — status "Sync fai
 runs the rollover and pushes again only if it still differs. Remote changes arrive through the file presenter, an
 `NSMetadataQuery` on the container (which also starts downloads), app activation and Sync now. First sync on a
 device: "before icloud" snapshot, then the same merge — a missing shared file is uploaded, an existing one merged.
+"Missing" is decided carefully, because a file that is in iCloud but not yet on this device would otherwise be
+overwritten by this device's copy: on real iCloud nothing syncs until the metadata query has finished gathering
+(status "Checking iCloud…"), and `CloudDocumentStore` asks `UbiquitousItemStatus` first — a dataless / stale file
+(`ubiquitousItemDownloadingStatus` not current), a legacy `.gym.json.icloud` placeholder, or a file the query lists
+but the disk lacks all count as "downloading". It starts the download and waits (`downloadTimeout`, 30 s); if the
+file is still not here it fails with "still downloading" and writes nothing, and the query's next update retries.
 
 **When it is off.** `CloudLocator` decides: `THUBAN_GYM_CLOUD_DIR` (a plain folder used as the container — the smoke
 runs use a temp one; also handy for two Mac instances) → `THUBAN_GYM_HOME` set (test data: "test data folder in

@@ -70,6 +70,9 @@ public struct SyncState: Codable, Equatable, Sendable {
 ///   operation with the app's current document.
 /// - First enable on a device: a "before icloud" snapshot of the local file, then the same merge — a missing shared
 ///   file is created from the local one; when both exist they are merged, never replaced.
+/// - On real iCloud nothing is synced until the metadata query has finished gathering, so the store knows whether
+///   the shared file exists in the cloud even before it is on this device (it then waits for the download instead
+///   of treating the file as missing).
 @MainActor
 @Observable
 public final class GymSync {
@@ -96,6 +99,10 @@ public final class GymSync {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var running = false
     @ObservationIgnored private var queued: GymData?
+    /// Real iCloud: the metadata query has not reported yet, so "no file here" may still mean "not downloaded".
+    @ObservationIgnored private var awaitingListing = false
+    /// How long "Checking iCloud…" may last before Settings says iCloud has not listed its files yet.
+    @ObservationIgnored public var listingTimeout: TimeInterval = 45
     @ObservationIgnored private var state: SyncState
     @ObservationIgnored private var identityObserver: NSObjectProtocol?
 
@@ -174,14 +181,23 @@ public final class GymSync {
             status = .off(reason)
         case .available(let url, let ubiquitous):
             cloudFileURL = url
-            let store = CloudDocumentStore(fileURL: url, conflicts: ubiquitous ? FileVersionConflicts() : NoConflictVersions())
+            let itemStatus = UbiquitousItemStatus()
+            let store = CloudDocumentStore(fileURL: url, conflicts: ubiquitous ? FileVersionConflicts() : NoConflictVersions(),
+                                           itemStatus: itemStatus)
             store.onChange = { [weak self] in
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.remoteChanged() } }
             }
             store.startPresenting()
             document = store
             if ubiquitous {
-                watcher = CloudMetadataWatcher(fileName: url.lastPathComponent) { [weak self] in self?.remoteChanged() }
+                awaitingListing = true
+                watcher = CloudMetadataWatcher(fileName: url.lastPathComponent) { [weak self] listed in
+                    itemStatus.cloudListed = listed
+                    self?.listingArrived(generation: token)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + listingTimeout) { [weak self] in
+                    MainActor.assumeIsolated { self?.listingOverdue(generation: token) }
+                }
             }
             if let data = currentData?() {
                 requestSync(data)
@@ -191,13 +207,24 @@ public final class GymSync {
         }
     }
 
+    private func listingArrived(generation token: Int) {
+        guard token == generation else { return }
+        awaitingListing = false
+        remoteChanged()
+    }
+
+    private func listingOverdue(generation token: Int) {
+        guard token == generation, awaitingListing, document != nil else { return }
+        status = .failed("iCloud has not listed its files yet. Sync starts once it does.")
+    }
+
     private func remoteChanged() {
         guard document != nil, let data = currentData?() else { return }
         requestSync(data)
     }
 
     private func runIfIdle() {
-        guard !running, let payload = queued, let store = document else { return }
+        guard !running, !awaitingListing, let payload = queued, let store = document else { return }
         queued = nil
         running = true
         status = .syncing
@@ -241,6 +268,7 @@ public final class GymSync {
         watcher = nil
         cloudFileURL = nil
         queued = nil
+        awaitingListing = false
     }
 
     private func observeIdentity() {
@@ -255,14 +283,15 @@ public final class GymSync {
 }
 
 /// Watches the shared file through Spotlight's iCloud index: asks iCloud to download a newer copy when one
-/// appears, and reports every change (downloaded, uploaded, replaced) so the app merges it.
+/// appears, and reports every change (downloaded, uploaded, replaced) so the app merges it. `onChange` receives
+/// whether iCloud lists the file at all (it can before any copy is on this device).
 final class CloudMetadataWatcher: NSObject, @unchecked Sendable {
     private let query = NSMetadataQuery()
-    private let onChange: @MainActor () -> Void
+    private let onChange: @MainActor (Bool) -> Void
     private var observers: [NSObjectProtocol] = []
 
     @MainActor
-    init(fileName: String, onChange: @escaping @MainActor () -> Void) {
+    init(fileName: String, onChange: @escaping @MainActor (Bool) -> Void) {
         self.onChange = onChange
         super.init()
         query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
@@ -279,15 +308,17 @@ final class CloudMetadataWatcher: NSObject, @unchecked Sendable {
     @MainActor
     private func handle() {
         query.disableUpdates()
+        var listed = false
         for case let item as NSMetadataItem in query.results {
             guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { continue }
+            listed = true
             let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
             if status != NSMetadataUbiquitousItemDownloadingStatusCurrent {
                 try? FileManager.default.startDownloadingUbiquitousItem(at: url)
             }
         }
         query.enableUpdates()
-        onChange()
+        onChange(listed)
     }
 
     func stop() {

@@ -350,10 +350,30 @@ public struct PlanExtra: Codable, Hashable, Sendable, Identifiable {
 // MARK: - IDs
 
 public enum GymID {
-    /// Atlas-style ids: `gw-…` workouts, `ge-…` exercises, `gl-…` logs.
+    /// Atlas-style ids: `gw-…` workouts, `ge-…` exercises, `gl-…` logs, `gs-…` sets: `<prefix>-<ms><random>`,
+    /// the milliseconds in base 36.
+    ///
+    /// The millisecond part is strictly increasing within the process (two ids made in the same millisecond get
+    /// consecutive values), so ids made one after another sort in the order they were made. Sets rely on this: a
+    /// row's sets are ordered by `(loggedAt, id)` and `loggedAt` is whole seconds, so sets logged in the same second
+    /// (quick taps, several sets stamped in one change) keep their logged order instead of an order decided by the
+    /// random suffix. (Base 36 of today's milliseconds is 8 digits until 2059, so string order is numeric order.)
     public static func make(_ prefix: String) -> String {
-        let time = String(UInt64(Date().timeIntervalSince1970 * 1000), radix: 36)
+        let time = String(clock.next(), radix: 36)
         let random = String(UInt32.random(in: 0...UInt32.max), radix: 36)
         return "\(prefix)-\(time)\(random)"
+    }
+
+    private static let clock = MonotonicMillis()
+
+    private final class MonotonicMillis: @unchecked Sendable {
+        private let lock = NSLock()
+        private var last: UInt64 = 0
+
+        func next() -> UInt64 {
+            lock.lock(); defer { lock.unlock() }
+            last = max(UInt64(Date().timeIntervalSince1970 * 1000), last + 1)
+            return last
+        }
     }
 }

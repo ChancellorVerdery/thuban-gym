@@ -19,6 +19,38 @@ final class FolderConflicts: ConflictVersionSource {
     }
 }
 
+/// iCloud's download state, scripted: the file is "in the cloud but not here" until `download` runs (after
+/// `pollsBeforeDownload` checks; nil = never).
+final class ScriptedItemStatus: CloudItemStatus, @unchecked Sendable {
+    private let lock = NSLock()
+    private var polls = 0
+    private var downloaded = false
+    let pollsBeforeDownload: Int?
+    let download: () -> Void
+    private(set) var downloadRequests = 0
+
+    init(pollsBeforeDownload: Int?, download: @escaping () -> Void = {}) {
+        self.pollsBeforeDownload = pollsBeforeDownload
+        self.download = download
+    }
+
+    func state(of url: URL) -> CloudItemState {
+        lock.lock(); defer { lock.unlock() }
+        if downloaded { return .current }
+        polls += 1
+        if let limit = pollsBeforeDownload, polls > limit {
+            download()
+            downloaded = true
+            return .current
+        }
+        return .downloading
+    }
+
+    func startDownloading(_ url: URL) {
+        lock.lock(); downloadRequests += 1; lock.unlock()
+    }
+}
+
 /// The shared file without iCloud: two "devices" (two stores / two sync controllers) on one temp folder.
 final class SyncCloudTests: XCTestCase {
     var root: URL!
@@ -144,6 +176,69 @@ final class SyncCloudTests: XCTestCase {
         XCTAssertThrowsError(try store.synchronize(with: base())) { error in
             XCTAssertTrue(error.localizedDescription.contains("newer"))
         }
+    }
+
+    // MARK: Not-yet-downloaded shared file (placeholder race)
+
+    func testASharedFileStillDownloadingIsWaitedForNotOverwritten() throws {
+        // The Mac's data is in iCloud; the phone was just installed and iCloud is still downloading gym.json.
+        let start = base()
+        let shared = edit(start, at: 10) { $0.logSet(exerciseId: "bench", date: today, weightKg: 80, reps: 5) }
+        let phoneLocal = edit(start, at: 20) { $0.logSet(exerciseId: "row", date: today, weightKg: 60, reps: 8) }
+        let status = ScriptedItemStatus(pollsBeforeDownload: 3) { [cloudFile, weak self] in
+            try? self?.write(shared, to: cloudFile)
+        }
+        let store = CloudDocumentStore(fileURL: cloudFile, conflicts: NoConflictVersions(), itemStatus: status)
+        store.downloadPollInterval = 0.01
+
+        let outcome = try store.synchronize(with: phoneLocal)
+        XCTAssertTrue(outcome.cloudExisted, "the downloaded copy was merged, not treated as missing")
+        XCTAssertGreaterThan(status.downloadRequests, 0)
+        let merged = try XCTUnwrap(try store.read())
+        XCTAssertEqual(merged.sets(exerciseId: "bench", date: today).count, 1, "the Mac's set survives")
+        XCTAssertEqual(merged.sets(exerciseId: "row", date: today).count, 1, "the phone's set is added")
+    }
+
+    func testADownloadThatNeverFinishesFailsWithoutWriting() throws {
+        let status = ScriptedItemStatus(pollsBeforeDownload: nil)
+        let store = CloudDocumentStore(fileURL: cloudFile, conflicts: NoConflictVersions(), itemStatus: status)
+        store.downloadTimeout = 0.1
+        store.downloadPollInterval = 0.01
+        XCTAssertThrowsError(try store.synchronize(with: base())) { error in
+            XCTAssertTrue(error.localizedDescription.contains("still downloading"))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cloudFile.path), "nothing uploaded over the cloud's copy")
+    }
+
+    func testALegacyPlaceholderIsNotAMissingFile() throws {
+        // Pre-FileProvider iCloud: `.gym.json.icloud` stands where gym.json will be.
+        let placeholder = UbiquitousItemStatus.placeholderURL(for: cloudFile)
+        XCTAssertEqual(placeholder.lastPathComponent, ".gym.json.icloud")
+        try FileManager.default.createDirectory(at: placeholder.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: placeholder)
+        let status = UbiquitousItemStatus()
+        XCTAssertEqual(status.state(of: cloudFile), .downloading)
+        let store = CloudDocumentStore(fileURL: cloudFile, conflicts: NoConflictVersions(), itemStatus: status)
+        store.downloadTimeout = 0.1
+        store.downloadPollInterval = 0.01
+        XCTAssertThrowsError(try store.synchronize(with: base()))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cloudFile.path))
+    }
+
+    func testAFileOnlyTheICloudListingKnowsIsNotAMissingFile() throws {
+        let status = UbiquitousItemStatus()
+        XCTAssertEqual(status.state(of: cloudFile), .absent, "unknown listing, nothing on disk: a real first upload")
+        status.cloudListed = true
+        XCTAssertEqual(status.state(of: cloudFile), .downloading)
+        let store = CloudDocumentStore(fileURL: cloudFile, conflicts: NoConflictVersions(), itemStatus: status)
+        store.downloadTimeout = 0.1
+        store.downloadPollInterval = 0.01
+        XCTAssertThrowsError(try store.synchronize(with: base()))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cloudFile.path))
+
+        status.cloudListed = false
+        XCTAssertTrue(try store.synchronize(with: base()).wroteCloud, "iCloud lists no file: upload")
+        XCTAssertEqual(status.state(of: cloudFile), .current, "a local, non-ubiquitous file is current")
     }
 
     func testThePresenterHearsAnotherWriter() throws {

@@ -63,9 +63,20 @@ public struct SyncOutcome: Sendable {
 /// There is no blind overwrite: `synchronize(with:)` reads the shared copy and every unresolved conflict version,
 /// merges them with the local document (`GymMerge`), writes the result only when it differs, and resolves the
 /// conflict versions it merged. Runs on a background queue (coordination can wait on the daemon).
+///
+/// A shared file that iCloud has but this device has not downloaded yet (a placeholder, a dataless file, a stale
+/// copy, or a file only the metadata query knows about) is waited for, never read as "no shared file": after
+/// `downloadTimeout` the sync fails and writes nothing, so a new or reconnecting device cannot upload its own copy
+/// over the shared one.
 public final class CloudDocumentStore: NSObject, NSFilePresenter, @unchecked Sendable {
     public let fileURL: URL
     public let conflicts: ConflictVersionSource
+    /// Whether the shared file is on this device (see `CloudItemState`).
+    public let itemStatus: CloudItemStatus
+    /// How long `synchronize(with:)` waits for iCloud to finish downloading the shared file before giving up.
+    public var downloadTimeout: TimeInterval = 30
+    /// How often the download state is checked while waiting.
+    public var downloadPollInterval: TimeInterval = 0.25
     /// Called on the presenter queue when another writer changed / replaced / deleted the file.
     public var onChange: (() -> Void)?
 
@@ -80,9 +91,11 @@ public final class CloudDocumentStore: NSObject, NSFilePresenter, @unchecked Sen
     private let lock = NSLock()
     private var presenting = false
 
-    public init(fileURL: URL, conflicts: ConflictVersionSource = FileVersionConflicts()) {
+    public init(fileURL: URL, conflicts: ConflictVersionSource = FileVersionConflicts(),
+                itemStatus: CloudItemStatus = UbiquitousItemStatus()) {
         self.fileURL = fileURL
         self.conflicts = conflicts
+        self.itemStatus = itemStatus
         super.init()
     }
 
@@ -116,18 +129,15 @@ public final class CloudDocumentStore: NSObject, NSFilePresenter, @unchecked Sen
     }
 
     /// Merges `local` into the shared file (coordinated read-merge-write, conflict versions included) and returns
-    /// the merged document. Throws — and writes nothing — when the shared copy exists but cannot be read, or was
-    /// written by a newer app version.
+    /// the merged document. Throws — and writes nothing — when the shared copy exists but cannot be read, was
+    /// written by a newer app version, or is still downloading from iCloud after `downloadTimeout`.
     public func synchronize(with local: GymData) throws -> SyncOutcome {
-        let fileManager = FileManager.default
         do {
-            try fileManager.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         } catch {
             throw ThubanError.store("iCloud folder unavailable: \(error.localizedDescription)")
         }
-        if fileManager.isUbiquitousItem(at: fileURL) {
-            try? fileManager.startDownloadingUbiquitousItem(at: fileURL)
-        }
+        try waitUntilDownloaded()
         var coordinationError: NSError?
         var result: Result<SyncOutcome, Error> = .failure(ThubanError.store("iCloud sync did not run."))
         // A coordinated write "for merging" is also a coordinated read: iCloud downloads the latest copy first.
@@ -138,8 +148,28 @@ public final class CloudDocumentStore: NSObject, NSFilePresenter, @unchecked Sen
         return try result.get()
     }
 
+    /// Blocks (background queue) until the shared file is absent or current here. Throws when it is still
+    /// downloading at the deadline — the caller must not merge, since the cloud's copy is not readable yet.
+    func waitUntilDownloaded() throws {
+        let deadline = Date().addingTimeInterval(downloadTimeout)
+        var asked = false
+        while itemStatus.state(of: fileURL) == .downloading {
+            if !asked || Date() >= deadline { itemStatus.startDownloading(fileURL); asked = true }
+            guard Date() < deadline else { throw Self.stillDownloading }
+            Thread.sleep(forTimeInterval: downloadPollInterval)
+        }
+    }
+
+    static let stillDownloading = ThubanError.store(
+        "gym.json is still downloading from iCloud, so nothing was synced yet (this device's log is untouched). It syncs once the download finishes.")
+
     private func mergeCoordinated(at url: URL, local: GymData) throws -> SyncOutcome {
         let cloud = try Self.readFile(at: url)
+        // Nothing readable, yet iCloud has the file (it went back to the cloud since the wait): never "first upload".
+        if cloud == nil, itemStatus.state(of: fileURL) == .downloading {
+            itemStatus.startDownloading(fileURL)
+            throw Self.stillDownloading
+        }
         var merged = GymMerge.merge(local, local) // normal form
         if let cloud { merged = GymMerge.merge(merged, cloud) }
 
