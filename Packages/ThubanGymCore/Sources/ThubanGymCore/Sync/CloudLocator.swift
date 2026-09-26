@@ -19,7 +19,7 @@ public enum CloudOffReason: String, Equatable, Sendable {
         switch self {
         case .turnedOff: return "turned off"
         case .unsignedBuild: return "iCloud needs a signed build"
-        case .notSignedIn: return "not signed in to iCloud"
+        case .notSignedIn: return "iCloud Drive is off or you’re not signed in to iCloud"
         case .containerUnavailable: return "iCloud Drive is not available to Thuban Gym"
         case .testHome: return "test data folder in use"
         case .localUnreadable: return "this device's gym.json could not be read"
