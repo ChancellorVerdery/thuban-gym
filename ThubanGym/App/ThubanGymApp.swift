@@ -53,6 +53,12 @@ private struct SettingsCommandButton: View {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            SharedTheme.handleRefreshLaunch { AppIconRenderer.render(theme: $0) }
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
     }

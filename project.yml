@@ -42,6 +42,8 @@ targets:
         NSPrincipalClass: NSApplication
         NSSupportsAutomaticTermination: false
         NSSupportsSuddenTermination: false
+        # One scheme for every Thuban Mac app (ThubanGym/App/SharedTheme.swift); lets other apps run --refresh-icon.
+        ThubanSharedTheme: true
         # iCloud Sync: ThubanICloud is YES only in a build signed with a team and the iCloud entitlements
         # (Config/*.xcconfig); the container holds Documents/gym.json and is hidden from iCloud Drive / Files.
         ThubanICloud: "$(THUBAN_SIGNED)"

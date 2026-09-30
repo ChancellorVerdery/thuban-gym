@@ -42,7 +42,10 @@ final class AppModel {
         didSet {
             guard preferences != oldValue else { return }
             persistPreferences()
-            if preferences.theme != oldValue.theme { recomputeTheme() }
+            if preferences.theme != oldValue.theme {
+                recomputeTheme()
+                SharedTheme.publish(preferences.theme)
+            }
             if preferences.iCloudSync != oldValue.iCloudSync, isLoaded { sync.setEnabled(preferences.iCloudSync) }
         }
     }
@@ -83,6 +86,7 @@ final class AppModel {
         self.store = store
         sync = GymSync(local: store)
         preferences = Preferences.load()
+        if let shared = SharedTheme.load() { preferences.theme = shared }
         systemIsDark = Self.currentSystemIsDark()
         theme = ThemeResolver.resolve(preferences.theme, systemIsDark: systemIsDark)
         if let raw = preferences.lastSection, let saved = AppSection(rawValue: raw) { section = saved }
@@ -95,6 +99,9 @@ final class AppModel {
     func load() async {
         guard !isLoaded else { return }
         if appearanceObservation == nil { observeAppearance() }
+        observeSharedTheme()
+        // First Thuban app to run with sharing seeds the file with its own scheme.
+        if SharedTheme.load() == nil { SharedTheme.publish(preferences.theme) }
         recomputeTheme()
         today = .today()
         do {
@@ -276,6 +283,17 @@ final class AppModel {
         selection.schemeId = id
         if id == ThubanScheme.customId, selection.custom == nil { selection.custom = SchemePresets.default.asCustom() }
         setThemeSelection(selection)
+    }
+
+    @ObservationIgnored private var sharedThemeObserver: NSObjectProtocol?
+
+    /// Another Thuban app changed the scheme: adopt it (publishing again is a no-op once the file matches).
+    private func observeSharedTheme() {
+        guard sharedThemeObserver == nil else { return }
+        sharedThemeObserver = SharedTheme.observe { [weak self] selection in
+            guard let self, self.preferences.theme != selection else { return }
+            self.preferences.theme = selection
+        }
     }
 
     private func observeAppearance() {

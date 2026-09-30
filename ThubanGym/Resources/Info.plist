@@ -46,5 +46,7 @@
 	</dict>
 	<key>ThubanICloud</key>
 	<string>$(THUBAN_SIGNED)</string>
+	<key>ThubanSharedTheme</key>
+	<true/>
 </dict>
 </plist>
