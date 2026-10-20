@@ -4,7 +4,13 @@ import ThubanGymCore
 @main
 struct ThubanGymApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @State private var appModel = AppModel()
+    @State private var appModel: AppModel
+
+    init() {
+        // Must run before anything touches NSApplication (see SharedTheme): an icon-only launch exits here.
+        SharedTheme.refreshIconAndExitIfRequested { AppIconRenderer.render(theme: $0) }
+        _appModel = State(initialValue: AppModel())
+    }
 
     var body: some Scene {
         WindowGroup("Thuban Gym") {
@@ -55,7 +61,6 @@ private struct SettingsCommandButton: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         MainActor.assumeIsolated {
-            SharedTheme.handleRefreshLaunch { AppIconRenderer.render(theme: $0) }
         }
     }
 
