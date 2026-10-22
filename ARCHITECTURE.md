@@ -262,8 +262,9 @@ extension SmokeScenes {
 ```
 
 `window: .main` (default), `.sheet` (the sheet attached to the main window) or `.settings`; `settle:` seconds before
-capture. The Settings window has no title bar (`.hiddenTitleBar`); `cacheDisplay` draws its ScrollView blank, so the
-harness captures that window with `screencapture -l` (falls back to `cacheDisplay` without Screen Recording permission). Always undo state in `cleanup` so later scenes start from the sample world. Look at your PNGs (Read tool)
+capture. Every capture is rendered at retina scale (at least 2×, also on a 1× display). The Settings window has no title
+bar (`.hiddenTitleBar`) and `cacheDisplay` leaves its ScrollView transparent, so the harness paints the theme background
+and draws each visible scroll document over it. Always undo state in `cleanup` so later scenes start from the sample world. Look at your PNGs (Read tool)
 and compare them with the artboards before you finish.
 
 ## Build / test / smoke

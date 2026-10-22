@@ -51,7 +51,8 @@ enum SmokeHarness {
                 case .sheet: target = try await waitFor(timeout: 5) { window.attachedSheet }
                 case .settings: target = try await waitForWindow(timeout: 5) { $0.title == "Settings" && $0.isVisible }
                 }
-                try capture(target, name: String(format: "%02d-%@", 30 + index, scene.name), in: directory)
+                try capture(target, name: String(format: "%02d-%@", 30 + index, scene.name), in: directory,
+                            backdrop: scene.window == .settings ? NSColor(hex: app.theme.bg) : nil)
                 await scene.cleanup(app)
                 await sleep(0.5)
             }
@@ -72,7 +73,8 @@ enum SmokeHarness {
                 if index == 0 { settings.setContentSize(NSSize(width: 1100, height: 760)) }
                 await sleep(0.9)
                 let slug = pane.rawValue.lowercased().map { $0.isLetter ? $0 : "-" }
-                try capture(settings, name: String(format: "%02d-settings-%@", 80 + index, String(slug)), in: directory)
+                try capture(settings, name: String(format: "%02d-settings-%@", 80 + index, String(slug)), in: directory,
+                            backdrop: NSColor(hex: app.theme.bg))
             }
         } catch {
             logger.error("smoke failed: \(error.localizedDescription, privacy: .public)")
@@ -100,38 +102,52 @@ enum SmokeHarness {
         throw ThubanError.store("smoke: window did not appear within \(Int(timeout)) s")
     }
 
-    /// Renders the window's content view (`cacheDisplay`) to `<name>.png`. No screen-recording permission needed.
-    /// The Settings window has no title bar, and `cacheDisplay` draws its ScrollView blank there, so it is grabbed
-    /// with `screencapture -l` (the window server's own pixels) when that is permitted, else falls back.
-    private static func capture(_ window: NSWindow, name: String, in directory: URL) throws {
-        let url = directory.appendingPathComponent("\(name).png")
-        if window.title == "Settings", captureWithWindowServer(window, to: url) {
-            print("smoke: \(name) (window server)")
-            return
-        }
+    /// Renders the window's content view (`cacheDisplay`) to `<name>.png` at retina scale (at least 2×, so a 1×
+    /// display still gives README-quality pixels). No screen-recording permission needed. The Settings window has no
+    /// title bar, and `cacheDisplay` leaves its pane's ScrollView transparent there, so for it `backdrop` (the theme
+    /// background) is painted first and every visible scroll document is cached separately and drawn on top.
+    private static func capture(_ window: NSWindow, name: String, in directory: URL, backdrop: NSColor? = nil) throws {
         guard let content = window.contentView else { throw ThubanError.store("smoke: window has no content view") }
         let bounds = content.bounds
-        guard let rep = content.bitmapImageRepForCachingDisplay(in: bounds) else {
-            throw ThubanError.store("smoke: could not create a bitmap for \(name)")
-        }
+        let scale = max(window.backingScaleFactor, 2)
+        var rep = try bitmap(bounds.size, scale: scale, name: name)
         content.cacheDisplay(in: bounds, to: rep)
+        if let backdrop {
+            let composed = try bitmap(bounds.size, scale: scale, name: name)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: composed)
+            backdrop.setFill()
+            bounds.fill()
+            rep.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: nil)
+            for clip in clipViews(in: content) where !clip.isHiddenOrHasHiddenAncestor {
+                guard let document = clip.documentView else { continue }
+                let visible = clip.documentVisibleRect
+                let part = try bitmap(visible.size, scale: scale, name: name)
+                document.cacheDisplay(in: visible, to: part)
+                var target = document.convert(visible, to: content)
+                if content.isFlipped { target.origin.y = bounds.height - target.maxY }
+                part.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: nil)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            rep = composed
+        }
         guard let png = rep.representation(using: .png, properties: [:]) else { throw ThubanError.store("smoke: PNG encoding failed for \(name)") }
-        try png.write(to: url)
+        try png.write(to: directory.appendingPathComponent("\(name).png"))
         print("smoke: \(name)")
     }
 
-    /// `screencapture -l <window> -o -x`: true when it produced a non-trivial PNG (it needs Screen Recording
-    /// permission for the launching terminal; without it the file is missing or only shows the desktop).
-    private static func captureWithWindowServer(_ window: NSWindow, to url: URL) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-l", String(window.windowNumber), "-o", "-x", url.path]
-        do { try process.run() } catch { return false }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0, let image = NSImage(contentsOf: url), image.size.width > 100 else {
-            try? FileManager.default.removeItem(at: url)
-            return false
-        }
-        return true
+    /// An RGBA bitmap of `size` points backed by `size × scale` pixels.
+    private static func bitmap(_ size: NSSize, scale: CGFloat, name: String) throws -> NSBitmapImageRep {
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int((size.width * scale).rounded()), pixelsHigh: Int((size.height * scale).rounded()),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ) else { throw ThubanError.store("smoke: could not create a bitmap for \(name)") }
+        rep.size = size
+        return rep
+    }
+
+    private static func clipViews(in view: NSView) -> [NSClipView] {
+        view.subviews.flatMap { subview in [subview as? NSClipView].compactMap { $0 } + clipViews(in: subview) }
     }
 }
