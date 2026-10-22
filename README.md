@@ -161,11 +161,11 @@ iCloud container and the provisioning profiles for the Apple ID added in Xcode â
 
 Thuban Gym is one app in a suite of native Mac apps that share one theme engine and colour scheme:
 
-- [Thuban Study](https://github.com/GITHUB_USER/thuban-study)
-- [Thuban Graph](https://github.com/GITHUB_USER/thuban-graph)
-- [Thuban Canvas](https://github.com/GITHUB_USER/thuban-canvas)
-- [Thuban Desk](https://github.com/GITHUB_USER/thuban-desk)
-- [Thuban Planner](https://github.com/GITHUB_USER/thuban-planner)
+- [Thuban Study](https://github.com/ChancellorVerdery/thuban-study)
+- [Thuban Graph](https://github.com/ChancellorVerdery/thuban-graph)
+- [Thuban Canvas](https://github.com/ChancellorVerdery/thuban-canvas)
+- [Thuban Desk](https://github.com/ChancellorVerdery/thuban-desk)
+- [Thuban Planner](https://github.com/ChancellorVerdery/thuban-planner)
 
 ---
 
